@@ -1,3 +1,6 @@
+release:
+	goreleaser release --skip=publish --clean
+
 lint:
 	golangci-lint run -c ./golangci.yml ./...
 
