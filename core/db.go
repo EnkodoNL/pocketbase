@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -37,18 +36,18 @@ type DBExporter interface {
 }
 
 // PreValidator defines an optional model interface for registering a
-// function that will run BEFORE firing the validation hooks (see [App.ValidateWithContext]).
+// function that will run BEFORE firing the validation hooks (see [App.Validate]).
 type PreValidator interface {
 	// PreValidate defines a function that runs BEFORE the validation hooks.
-	PreValidate(ctx context.Context, app App) error
+	PreValidate(app App) error
 }
 
 // PostValidator defines an optional model interface for registering a
-// function that will run AFTER executing the validation hooks (see [App.ValidateWithContext]).
+// function that will run AFTER executing the validation hooks (see [App.Validate]).
 type PostValidator interface {
 	// PostValidate defines a function that runs AFTER the successful
 	// execution of the validation hooks.
-	PostValidate(ctx context.Context, app App) error
+	PostValidate(app App) error
 }
 
 // GenerateDefaultRandomId generates a default random id string
@@ -81,37 +80,24 @@ func (app *BaseApp) modelQuery(db dbx.Builder, m Model) *dbx.SelectQuery {
 		Select("{{" + tableName + "}}.*").
 		From(tableName).
 		WithBuildHook(func(query *dbx.Query) {
-			query.WithExecHook(execLockRetry(app.config.QueryTimeout, defaultMaxLockRetries))
+			query.WithExecHook(execLockRetry(app, defaultMaxLockRetries))
 		})
 }
 
 // Delete deletes the specified model from the regular app database.
 func (app *BaseApp) Delete(model Model) error {
-	return app.DeleteWithContext(context.Background(), model)
-}
-
-// Delete deletes the specified model from the regular app database
-// (the context could be used to limit the query execution).
-func (app *BaseApp) DeleteWithContext(ctx context.Context, model Model) error {
-	return app.delete(ctx, model, false)
+	return app.delete(model, false)
 }
 
 // AuxDelete deletes the specified model from the auxiliary database.
 func (app *BaseApp) AuxDelete(model Model) error {
-	return app.AuxDeleteWithContext(context.Background(), model)
+	return app.delete(model, true)
 }
 
-// AuxDeleteWithContext deletes the specified model from the auxiliary database
-// (the context could be used to limit the query execution).
-func (app *BaseApp) AuxDeleteWithContext(ctx context.Context, model Model) error {
-	return app.delete(ctx, model, true)
-}
-
-func (app *BaseApp) delete(ctx context.Context, model Model, isForAuxDB bool) error {
+func (app *BaseApp) delete(model Model, isForAuxDB bool) error {
 	event := new(ModelEvent)
 	event.App = app
 	event.Type = ModelEventTypeDelete
-	event.Context = ctx
 	event.Model = model
 
 	deleteErr := app.OnModelDelete().Trigger(event, func(e *ModelEvent) error {
@@ -132,7 +118,7 @@ func (app *BaseApp) delete(ctx context.Context, model Model, isForAuxDB bool) er
 			return baseLockRetry(func(attempt int) error {
 				_, err := db.Delete(e.Model.TableName(), dbx.HashExp{
 					idColumn: pk,
-				}).WithContext(e.Context).Execute()
+				}).Execute()
 
 				return err
 			}, defaultMaxLockRetries)
@@ -176,82 +162,46 @@ func (app *BaseApp) delete(ctx context.Context, model Model, isForAuxDB bool) er
 //
 // If you don't want to run validations, use [App.SaveNoValidate()].
 func (app *BaseApp) Save(model Model) error {
-	return app.SaveWithContext(context.Background(), model)
-}
-
-// SaveWithContext is the same as [App.Save()] but allows specifying a context to limit the db execution.
-//
-// If you don't want to run validations, use [App.SaveNoValidateWithContext()].
-func (app *BaseApp) SaveWithContext(ctx context.Context, model Model) error {
-	return app.save(ctx, model, true, false)
+	return app.save(model, true, false)
 }
 
 // SaveNoValidate saves the specified model into the regular app database without performing validations.
 //
 // If you want to also run validations before persisting, use [App.Save()].
 func (app *BaseApp) SaveNoValidate(model Model) error {
-	return app.SaveNoValidateWithContext(context.Background(), model)
-}
-
-// SaveNoValidateWithContext is the same as [App.SaveNoValidate()]
-// but allows specifying a context to limit the db execution.
-//
-// If you want to also run validations before persisting, use [App.SaveWithContext()].
-func (app *BaseApp) SaveNoValidateWithContext(ctx context.Context, model Model) error {
-	return app.save(ctx, model, false, false)
+	return app.save(model, false, false)
 }
 
 // AuxSave validates and saves the specified model into the auxiliary app database.
 //
 // If you don't want to run validations, use [App.AuxSaveNoValidate()].
 func (app *BaseApp) AuxSave(model Model) error {
-	return app.AuxSaveWithContext(context.Background(), model)
-}
-
-// AuxSaveWithContext is the same as [App.AuxSave()] but allows specifying a context to limit the db execution.
-//
-// If you don't want to run validations, use [App.AuxSaveNoValidateWithContext()].
-func (app *BaseApp) AuxSaveWithContext(ctx context.Context, model Model) error {
-	return app.save(ctx, model, true, true)
+	return app.save(model, true, true)
 }
 
 // AuxSaveNoValidate saves the specified model into the auxiliary app database without performing validations.
 //
 // If you want to also run validations before persisting, use [App.AuxSave()].
 func (app *BaseApp) AuxSaveNoValidate(model Model) error {
-	return app.AuxSaveNoValidateWithContext(context.Background(), model)
-}
-
-// AuxSaveNoValidateWithContext is the same as [App.AuxSaveNoValidate()]
-// but allows specifying a context to limit the db execution.
-//
-// If you want to also run validations before persisting, use [App.AuxSaveWithContext()].
-func (app *BaseApp) AuxSaveNoValidateWithContext(ctx context.Context, model Model) error {
-	return app.save(ctx, model, false, true)
+	return app.save(model, false, true)
 }
 
 // Validate triggers the OnModelValidate hook for the specified model.
 func (app *BaseApp) Validate(model Model) error {
-	return app.ValidateWithContext(context.Background(), model)
-}
-
-// ValidateWithContext is the same as Validate but allows specifying the ModelEvent context.
-func (app *BaseApp) ValidateWithContext(ctx context.Context, model Model) error {
 	if m, ok := model.(PreValidator); ok {
-		if err := m.PreValidate(ctx, app); err != nil {
+		if err := m.PreValidate(app); err != nil {
 			return err
 		}
 	}
 
 	event := new(ModelEvent)
 	event.App = app
-	event.Context = ctx
 	event.Type = ModelEventTypeValidate
 	event.Model = model
 
 	return event.App.OnModelValidate().Trigger(event, func(e *ModelEvent) error {
 		if m, ok := e.Model.(PostValidator); ok {
-			if err := m.PostValidate(ctx, e.App); err != nil {
+			if err := m.PostValidate(e.App); err != nil {
 				return err
 			}
 		}
@@ -262,25 +212,24 @@ func (app *BaseApp) ValidateWithContext(ctx context.Context, model Model) error 
 
 // -------------------------------------------------------------------
 
-func (app *BaseApp) save(ctx context.Context, model Model, withValidations bool, isForAuxDB bool) error {
+func (app *BaseApp) save(model Model, withValidations bool, isForAuxDB bool) error {
 	if model.IsNew() {
-		return app.create(ctx, model, withValidations, isForAuxDB)
+		return app.create(model, withValidations, isForAuxDB)
 	}
 
-	return app.update(ctx, model, withValidations, isForAuxDB)
+	return app.update(model, withValidations, isForAuxDB)
 }
 
-func (app *BaseApp) create(ctx context.Context, model Model, withValidations bool, isForAuxDB bool) error {
+func (app *BaseApp) create(model Model, withValidations bool, isForAuxDB bool) error {
 	event := new(ModelEvent)
 	event.App = app
-	event.Context = ctx
 	event.Type = ModelEventTypeCreate
 	event.Model = model
 
 	saveErr := app.OnModelCreate().Trigger(event, func(e *ModelEvent) error {
 		// run validations (if any)
 		if withValidations {
-			validateErr := e.App.ValidateWithContext(e.Context, e.Model)
+			validateErr := e.App.Validate(e.Model)
 			if validateErr != nil {
 				return validateErr
 			}
@@ -311,12 +260,12 @@ func (app *BaseApp) create(ctx context.Context, model Model, withValidations boo
 						return errors.New("empty primary key is not allowed when using the DBExporter interface")
 					}
 
-					_, err = db.Insert(e.Model.TableName(), data).WithContext(e.Context).Execute()
+					_, err = db.Insert(e.Model.TableName(), data).Execute()
 
 					return err
 				}
 
-				return db.Model(e.Model).WithContext(e.Context).Insert()
+				return db.Model(e.Model).Insert()
 			}, defaultMaxLockRetries)
 			if dbErr != nil {
 				return dbErr
@@ -365,17 +314,16 @@ func (app *BaseApp) create(ctx context.Context, model Model, withValidations boo
 	return nil
 }
 
-func (app *BaseApp) update(ctx context.Context, model Model, withValidations bool, isForAuxDB bool) error {
+func (app *BaseApp) update(model Model, withValidations bool, isForAuxDB bool) error {
 	event := new(ModelEvent)
 	event.App = app
-	event.Context = ctx
 	event.Type = ModelEventTypeUpdate
 	event.Model = model
 
 	saveErr := app.OnModelUpdate().Trigger(event, func(e *ModelEvent) error {
 		// run validations (if any)
 		if withValidations {
-			validateErr := e.App.ValidateWithContext(e.Context, e.Model)
+			validateErr := e.App.Validate(e.Model)
 			if validateErr != nil {
 				return validateErr
 			}
@@ -404,12 +352,12 @@ func (app *BaseApp) update(ctx context.Context, model Model, withValidations boo
 
 					_, err = db.Update(e.Model.TableName(), data, dbx.HashExp{
 						idColumn: e.Model.LastSavedPK(),
-					}).WithContext(e.Context).Execute()
+					}).Execute()
 
 					return err
 				}
 
-				return db.Model(e.Model).WithContext(e.Context).Update()
+				return db.Model(e.Model).Update()
 			}, defaultMaxLockRetries)
 		})
 	})

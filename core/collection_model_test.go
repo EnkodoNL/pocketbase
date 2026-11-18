@@ -1,7 +1,6 @@
 package core_test
 
 import (
-	"context"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -1037,7 +1036,6 @@ func TestCollectionModelEventSync(t *testing.T) {
 	createModelEvent := func() *core.ModelEvent {
 		event := new(core.ModelEvent)
 		event.App = app
-		event.Context = context.Background()
 		event.Type = "test_a"
 		event.Model = testCollections[0]
 		return event
@@ -1052,32 +1050,22 @@ func TestCollectionModelEventSync(t *testing.T) {
 
 	changeCollectionEventBefore := func(e *core.CollectionEvent) {
 		e.Type = "test_b"
-		//nolint:staticcheck
-		e.Context = context.WithValue(context.Background(), "test", 123)
 		e.Collection = testCollections[1]
 	}
 
 	modelEventFinalizerChange := func(e *core.ModelEvent) {
 		e.Type = "test_c"
-		//nolint:staticcheck
-		e.Context = context.WithValue(context.Background(), "test", 456)
 		e.Model = testCollections[2]
 	}
 
 	changeCollectionEventAfter := func(e *core.CollectionEvent) {
 		e.Type = "test_d"
-		//nolint:staticcheck
-		e.Context = context.WithValue(context.Background(), "test", 789)
 		e.Collection = testCollections[3]
 	}
 
 	expectedBeforeModelEventHandlerChecks := func(t *testing.T, e *core.ModelEvent) {
 		if e.Type != "test_a" {
 			t.Fatalf("Expected type %q, got %q", "test_a", e.Type)
-		}
-
-		if v := e.Context.Value("test"); v != nil {
-			t.Fatalf("Expected context value %v, got %v", nil, v)
 		}
 
 		if e.Model.PK() != testCollections[0].Id {
@@ -1090,10 +1078,6 @@ func TestCollectionModelEventSync(t *testing.T) {
 			t.Fatalf("Expected type %q, got %q", "test_d", e.Type)
 		}
 
-		if v := e.Context.Value("test"); v != 789 {
-			t.Fatalf("Expected context value %v, got %v", 789, v)
-		}
-
 		if e.Model.PK() != testCollections[3].Id {
 			t.Fatalf("Expected collection with id %q, got %q (%d)", testCollections[3].Id, e.Model.PK(), 3)
 		}
@@ -1104,10 +1088,6 @@ func TestCollectionModelEventSync(t *testing.T) {
 			t.Fatalf("Expected type %q, got %q", "test_a", e.Type)
 		}
 
-		if v := e.Context.Value("test"); v != nil {
-			t.Fatalf("Expected context value %v, got %v", nil, v)
-		}
-
 		if e.Collection.Id != testCollections[0].Id {
 			t.Fatalf("Expected collection with id %q, got %q (%d)", testCollections[0].Id, e.Collection.Id, 0)
 		}
@@ -1116,10 +1096,6 @@ func TestCollectionModelEventSync(t *testing.T) {
 	expectedAfterCollectionEventHandlerChecks := func(t *testing.T, e *core.CollectionEvent) {
 		if e.Type != "test_c" {
 			t.Fatalf("Expected type %q, got %q", "test_c", e.Type)
-		}
-
-		if v := e.Context.Value("test"); v != 456 {
-			t.Fatalf("Expected context value %v, got %v", 456, v)
 		}
 
 		if e.Collection.Id != testCollections[2].Id {

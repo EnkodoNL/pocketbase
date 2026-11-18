@@ -1,7 +1,6 @@
 package core_test
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -368,7 +367,7 @@ func TestTextFieldValidateValue(t *testing.T) {
 
 	for _, s := range scenarios {
 		t.Run(s.name, func(t *testing.T) {
-			err := s.field.ValidateValue(context.Background(), app, s.record())
+			err := s.field.ValidateValue(app, s.record())
 
 			hasErr := err != nil
 			if hasErr != s.expectError {
@@ -575,7 +574,7 @@ func TestTextFieldValidateSettings(t *testing.T) {
 			collection.Fields.GetByName("id").SetId("test") // set a dummy known id so that it can be replaced
 			collection.Fields.Add(field)
 
-			errs := field.ValidateSettings(context.Background(), app, collection)
+			errs := field.ValidateSettings(app, collection)
 
 			tests.TestValidationErrors(t, errs, s.expectErrors)
 		})
@@ -652,7 +651,7 @@ func TestTextFieldAutogenerate(t *testing.T) {
 			actionCalls := 0
 			record := s.record()
 
-			err := s.field.Intercept(context.Background(), app, record, s.actionName, func() error {
+			err := s.field.Intercept(app, record, s.actionName, func() error {
 				actionCalls++
 				return nil
 			})

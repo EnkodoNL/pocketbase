@@ -3,7 +3,6 @@ package core
 import (
 	"archive/zip"
 	"compress/flate"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -64,7 +63,7 @@ var errIsDir = errors.New("the specified path is a directory and not a regular f
 // While there is a risk for a race condition between steps 1, 2 and 3, it is an
 // acceptable trade-off between performance and correctness because in
 // the worst case there will be some unused storage files in the backup that don't do any harm.
-func (app *BaseApp) CreateBackup(ctx context.Context, name string) error {
+func (app *BaseApp) CreateBackup(name string) error {
 	if app.Store().Has(StoreKeyActiveBackup) {
 		return errors.New("try again later - another backup/restore operation has already been started")
 	}
@@ -76,7 +75,6 @@ func (app *BaseApp) CreateBackup(ctx context.Context, name string) error {
 
 	event := new(BackupEvent)
 	event.App = app
-	event.Context = ctx
 	event.Name = name
 	// default root dir entries to exclude from the backup generation
 	event.Exclude = []string{
@@ -111,8 +109,6 @@ func (app *BaseApp) CreateBackup(ctx context.Context, name string) error {
 			return err
 		}
 		defer fsys.Close()
-
-		fsys.SetContext(e.Context)
 
 		file, err := filesystem.NewFileFromPath(tempZipPath)
 		if err != nil {

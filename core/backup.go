@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -45,7 +44,7 @@ func (app *BaseApp) registerAutobackupHooks() {
 
 			name := generateBackupName(app, autoPrefix)
 
-			if err := app.CreateBackup(context.Background(), name); err != nil {
+			if err := app.CreateBackup(name); err != nil {
 				app.Logger().Error(
 					"[Backup cron] Failed to create backup",
 					slog.String("name", name),

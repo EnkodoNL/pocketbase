@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"slices"
@@ -154,7 +153,7 @@ var emptyJSONValues = []string{
 }
 
 // ValidateValue implements [Field.ValidateValue] interface method.
-func (f *JSONField) ValidateValue(ctx context.Context, app App, record *Record) error {
+func (f *JSONField) ValidateValue(app App, record *Record) error {
 	raw, ok := record.GetRaw(f.Name).(types.JSONRaw)
 	if !ok {
 		return validators.ErrUnsupportedValueType
@@ -195,8 +194,8 @@ func (f *JSONField) ValidateValue(ctx context.Context, app App, record *Record) 
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
-func (f *JSONField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
-	return validation.ValidateStruct(f,
+func (f *JSONField) ValidateSettings(app App, collection *Collection) error {
+	return validation.ValidateStructWithContext(app.Context(), f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name, validation.By(DefaultFieldNameValidationRule)),
 		validation.Field(&f.Help, validation.By(DefaultFieldHelpValidationRule)),

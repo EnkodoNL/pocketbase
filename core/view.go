@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -151,9 +150,8 @@ func (app *BaseApp) DryRunView(dangerousSelectQuery string, sampleSize int) (*Dr
 	tempCollection.Fields = fields
 
 	// validate generated view fields
-	ctx := context.Background()
 	for i, f := range fields {
-		err = f.ValidateSettings(ctx, app, tempCollection)
+		err = f.ValidateSettings(app, tempCollection)
 		if err != nil {
 			return nil, fmt.Errorf("invalid field %q (%d): %w", f.GetName(), i, err)
 		}

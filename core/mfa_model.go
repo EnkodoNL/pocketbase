@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -55,7 +54,7 @@ func NewMFA(app App) *MFA {
 
 // PreValidate implements the [PreValidator] interface and checks
 // whether the proxy is properly loaded.
-func (m *MFA) PreValidate(ctx context.Context, app App) error {
+func (m *MFA) PreValidate(app App) error {
 	if m.Record == nil || m.Record.Collection().Name != CollectionNameMFAs {
 		return errors.New("missing or invalid mfa ProxyRecord")
 	}

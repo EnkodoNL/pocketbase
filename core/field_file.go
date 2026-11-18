@@ -223,8 +223,8 @@ func (f *FileField) DriverValue(record *Record) (driver.Value, error) {
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
-func (f *FileField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
-	return validation.ValidateStruct(f,
+func (f *FileField) ValidateSettings(app App, collection *Collection) error {
+	return validation.ValidateStructWithContext(app.Context(), f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name, validation.By(DefaultFieldNameValidationRule)),
 		validation.Field(&f.Help, validation.By(DefaultFieldHelpValidationRule)),
@@ -238,7 +238,7 @@ func (f *FileField) ValidateSettings(ctx context.Context, app App, collection *C
 }
 
 // ValidateValue implements [Field.ValidateValue] interface method.
-func (f *FileField) ValidateValue(ctx context.Context, app App, record *Record) error {
+func (f *FileField) ValidateValue(app App, record *Record) error {
 	files := f.toSliceValue(record.GetRaw(f.Name))
 	if len(files) == 0 {
 		if f.Required {
@@ -334,7 +334,6 @@ func (f *FileField) CalculateMaxBodySize() int64 {
 //
 // note: files delete after records deletion is handled globally by the app FileManager hook
 func (f *FileField) Intercept(
-	ctx context.Context,
 	app App,
 	record *Record,
 	actionName string,
@@ -344,19 +343,19 @@ func (f *FileField) Intercept(
 	case InterceptorActionCreateExecute, InterceptorActionUpdateExecute:
 		oldValue := f.getLatestOldValue(app, record)
 
-		err := f.processFilesToUpload(ctx, app, record)
+		err := f.processFilesToUpload(app.Context(), app, record)
 		if err != nil {
 			return err
 		}
 
 		err = actionFunc()
 		if err != nil {
-			return errors.Join(err, f.afterRecordExecuteFailure(newContextIfInvalid(ctx), app, record))
+			return errors.Join(err, f.afterRecordExecuteFailure(context.Background(), app, record))
 		}
 
 		f.rememberFilesToDelete(app, record, oldValue)
 
-		f.afterRecordExecuteSuccess(newContextIfInvalid(ctx), app, record)
+		f.afterRecordExecuteSuccess(context.Background(), app, record)
 
 		return nil
 	case InterceptorActionAfterCreateError, InterceptorActionAfterUpdateError:
@@ -365,7 +364,7 @@ func (f *FileField) Intercept(
 			return actionFunc()
 		}
 
-		failedToDelete, deleteErr := f.deleteNewlyUploadedFiles(newContextIfInvalid(ctx), app, record)
+		failedToDelete, deleteErr := f.deleteNewlyUploadedFiles(context.Background(), app, record)
 		if deleteErr != nil {
 			app.Logger().Warn(
 				"Failed to cleanup all new files after record commit failure",
@@ -382,7 +381,7 @@ func (f *FileField) Intercept(
 			// note: executed only on create failure to avoid accidentally
 			// deleting a concurrently updating directory due to the
 			// eventual consistent nature of some storage providers
-			err := f.deleteEmptyRecordDir(newContextIfInvalid(ctx), app, record)
+			err := f.deleteEmptyRecordDir(app, record)
 			if err != nil {
 				app.Logger().Warn("Failed to delete empty dir after new record commit failure", "error", err)
 			}
@@ -392,7 +391,7 @@ func (f *FileField) Intercept(
 	case InterceptorActionAfterCreate, InterceptorActionAfterUpdate:
 		record.SetRaw(uploadedFilesPrefix+f.Name, nil)
 
-		err := f.processFilesToDelete(ctx, app, record)
+		err := f.processFilesToDelete(app.Context(), app, record)
 		if err != nil {
 			return err
 		}
@@ -451,13 +450,13 @@ func (f *FileField) afterRecordExecuteFailure(ctx context.Context, app App, reco
 	return deleteErr
 }
 
-func (f *FileField) deleteEmptyRecordDir(ctx context.Context, app App, record *Record) error {
+func (f *FileField) deleteEmptyRecordDir(app App, record *Record) error {
 	fsys, err := app.NewFilesystem()
 	if err != nil {
 		return err
 	}
 	defer fsys.Close()
-	fsys.SetContext(newContextIfInvalid(ctx))
+	fsys.SetContext(context.Background()) // to ensure that it always run
 
 	dir := record.BaseFilesPath()
 

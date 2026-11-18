@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -49,7 +48,7 @@ func NewOTP(app App) *OTP {
 
 // PreValidate implements the [PreValidator] interface and checks
 // whether the proxy is properly loaded.
-func (m *OTP) PreValidate(ctx context.Context, app App) error {
+func (m *OTP) PreValidate(app App) error {
 	if m.Record == nil || m.Record.Collection().Name != CollectionNameOTPs {
 		return errors.New("missing or invalid otp ProxyRecord")
 	}

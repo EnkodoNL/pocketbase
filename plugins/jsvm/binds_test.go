@@ -47,7 +47,7 @@ func TestBindCoreCount(t *testing.T) {
 	vm := goja.New()
 	BindCore(vm)
 
-	testBindsCount(vm, "this", 41, t)
+	testBindsCount(vm, "this", 42, t)
 }
 
 func TestBindCoreSleep(t *testing.T) {
@@ -198,6 +198,46 @@ func TestBindCoreContext(t *testing.T) {
 			if (sub.value(s.key) != s.expected) {
 				throw new("Expected " +s.key + " value " + s.expected + ", got " + sub.value(s.key));
 			}
+		}
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBindCoreTimeoutContext(t *testing.T) {
+	vm := goja.New()
+	BindCore(vm)
+
+	_, err := vm.RunString(`
+		const base = new TimeoutContext(10);
+
+		if (typeof base.cancel != "function") {
+			throw new("Expected the context to have cancel function")
+		}
+
+		const [deadline, ok] = base.deadline()
+		if (!ok) {
+			throw new("Expected the context to be still valid")
+		}
+
+		const nanosec = 1000000000
+
+		const lowThreshold = -2 * nanosec
+		const lowTime = (new DateTime()).add(lowThreshold)
+		if (deadline.before(lowTime.time())) {
+			throw new("Expected deadline to be after " + lowTime.string() + ", got " + deadline.utc().string())
+		}
+
+		const highThreshold = 12 * nanosec
+		const highTime = (new DateTime()).add(highThreshold)
+		if (deadline.after(highTime.time())) {
+			throw new("Expected deadline to be before " + highTime.string() + ", got " + deadline.utc().string())
+		}
+
+		const sub = new TimeoutContext(10, new Context(null, "test", "123"));
+		if (sub.value("test") != 123) {
+			throw new("Expected 'test' value 123, got " + sub.value("test"))
 		}
 	`)
 	if err != nil {

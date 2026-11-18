@@ -50,6 +50,9 @@ const (
 	auxDBFilename  string = "auxiliary.db"
 )
 
+// base dummy context to ensure that it will be different from the other non-app contexts.
+var baseAppCtx = context.WithValue(context.Background(), "pbBaseApp", true)
+
 // FilesManager defines an interface with common methods that files manager models should implement.
 type FilesManager interface {
 	// BaseFilesPath returns the storage dir path used by the interface instance.
@@ -75,20 +78,8 @@ type BaseAppConfig struct {
 // ensures that the BaseApp implements the App interface.
 var _ App = (*BaseApp)(nil)
 
-// BaseApp implements core.App and defines the base PocketBase app structure.
-type BaseApp struct {
-	config              *BaseAppConfig
-	txInfo              *TxAppInfo
-	store               *store.Store[string, any]
-	cron                *cron.Cron
-	settings            *Settings
-	subscriptionsBroker *subscriptions.Broker
-	logger              *slog.Logger
-	concurrentDB        dbx.Builder
-	nonconcurrentDB     dbx.Builder
-	auxConcurrentDB     dbx.Builder
-	auxNonconcurrentDB  dbx.Builder
-
+// note: keep the hooks in a separate struct to make app shallow copying lighter
+type appHooks struct {
 	// app event hooks
 	onBootstrap      *hook.Hook[*BootstrapEvent]
 	onBootstrapClear *hook.Hook[*BootstrapEvent]
@@ -208,17 +199,36 @@ type BaseApp struct {
 	onBatchRequest *hook.Hook[*BatchRequestEvent]
 }
 
+// BaseApp implements core.App and defines the base PocketBase app structure.
+type BaseApp struct {
+	ctx                 context.Context
+	config              *BaseAppConfig
+	txInfo              *TxAppInfo
+	store               *store.Store[string, any]
+	cron                *cron.Cron
+	settings            *Settings
+	subscriptionsBroker *subscriptions.Broker
+	hooks               *appHooks
+	logger              *slog.Logger
+	concurrentDB        dbx.Builder
+	nonconcurrentDB     dbx.Builder
+	auxConcurrentDB     dbx.Builder
+	auxNonconcurrentDB  dbx.Builder
+}
+
 // NewBaseApp creates and returns a new BaseApp instance
 // configured with the provided arguments.
 //
 // To initialize the app, you need to call `app.Bootstrap()`.
 func NewBaseApp(config BaseAppConfig) *BaseApp {
 	app := &BaseApp{
+		ctx:                 baseAppCtx,
 		settings:            newDefaultSettings(),
 		store:               store.New[string, any](nil),
 		cron:                cron.New(),
 		subscriptionsBroker: subscriptions.NewBroker(),
 		config:              &config,
+		hooks:               &appHooks{},
 	}
 
 	// apply config defaults
@@ -249,128 +259,178 @@ func NewBaseApp(config BaseAppConfig) *BaseApp {
 
 // initHooks initializes all app hook handlers.
 func (app *BaseApp) initHooks() {
-	// app event hooks
-	app.onBootstrap = &hook.Hook[*BootstrapEvent]{}
-	app.onBootstrapClear = &hook.Hook[*BootstrapEvent]{}
-	app.onServe = &hook.Hook[*ServeEvent]{}
-	app.onTerminate = &hook.Hook[*TerminateEvent]{}
-	app.onBackupCreate = &hook.Hook[*BackupEvent]{}
-	app.onBackupRestore = &hook.Hook[*BackupEvent]{}
+	app.hooks = &appHooks{
+		// app event hooks
+		onBootstrap:      &hook.Hook[*BootstrapEvent]{},
+		onBootstrapClear: &hook.Hook[*BootstrapEvent]{},
+		onServe:          &hook.Hook[*ServeEvent]{},
+		onTerminate:      &hook.Hook[*TerminateEvent]{},
+		onBackupCreate:   &hook.Hook[*BackupEvent]{},
+		onBackupRestore:  &hook.Hook[*BackupEvent]{},
 
-	// db model hooks
-	app.onModelValidate = &hook.Hook[*ModelEvent]{}
-	app.onModelCreate = &hook.Hook[*ModelEvent]{}
-	app.onModelCreateExecute = &hook.Hook[*ModelEvent]{}
-	app.onModelAfterCreateSuccess = &hook.Hook[*ModelEvent]{}
-	app.onModelAfterCreateError = &hook.Hook[*ModelErrorEvent]{}
-	app.onModelUpdate = &hook.Hook[*ModelEvent]{}
-	app.onModelUpdateWrite = &hook.Hook[*ModelEvent]{}
-	app.onModelAfterUpdateSuccess = &hook.Hook[*ModelEvent]{}
-	app.onModelAfterUpdateError = &hook.Hook[*ModelErrorEvent]{}
-	app.onModelDelete = &hook.Hook[*ModelEvent]{}
-	app.onModelDeleteExecute = &hook.Hook[*ModelEvent]{}
-	app.onModelAfterDeleteSuccess = &hook.Hook[*ModelEvent]{}
-	app.onModelAfterDeleteError = &hook.Hook[*ModelErrorEvent]{}
+		// db model hooks
+		onModelValidate:           &hook.Hook[*ModelEvent]{},
+		onModelCreate:             &hook.Hook[*ModelEvent]{},
+		onModelCreateExecute:      &hook.Hook[*ModelEvent]{},
+		onModelAfterCreateSuccess: &hook.Hook[*ModelEvent]{},
+		onModelAfterCreateError:   &hook.Hook[*ModelErrorEvent]{},
+		onModelUpdate:             &hook.Hook[*ModelEvent]{},
+		onModelUpdateWrite:        &hook.Hook[*ModelEvent]{},
+		onModelAfterUpdateSuccess: &hook.Hook[*ModelEvent]{},
+		onModelAfterUpdateError:   &hook.Hook[*ModelErrorEvent]{},
+		onModelDelete:             &hook.Hook[*ModelEvent]{},
+		onModelDeleteExecute:      &hook.Hook[*ModelEvent]{},
+		onModelAfterDeleteSuccess: &hook.Hook[*ModelEvent]{},
+		onModelAfterDeleteError:   &hook.Hook[*ModelErrorEvent]{},
 
-	// db record hooks
-	app.onRecordEnrich = &hook.Hook[*RecordEnrichEvent]{}
-	app.onRecordValidate = &hook.Hook[*RecordEvent]{}
-	app.onRecordCreate = &hook.Hook[*RecordEvent]{}
-	app.onRecordCreateExecute = &hook.Hook[*RecordEvent]{}
-	app.onRecordAfterCreateSuccess = &hook.Hook[*RecordEvent]{}
-	app.onRecordAfterCreateError = &hook.Hook[*RecordErrorEvent]{}
-	app.onRecordUpdate = &hook.Hook[*RecordEvent]{}
-	app.onRecordUpdateExecute = &hook.Hook[*RecordEvent]{}
-	app.onRecordAfterUpdateSuccess = &hook.Hook[*RecordEvent]{}
-	app.onRecordAfterUpdateError = &hook.Hook[*RecordErrorEvent]{}
-	app.onRecordDelete = &hook.Hook[*RecordEvent]{}
-	app.onRecordDeleteExecute = &hook.Hook[*RecordEvent]{}
-	app.onRecordAfterDeleteSuccess = &hook.Hook[*RecordEvent]{}
-	app.onRecordAfterDeleteError = &hook.Hook[*RecordErrorEvent]{}
+		// db record hooks
+		onRecordEnrich:             &hook.Hook[*RecordEnrichEvent]{},
+		onRecordValidate:           &hook.Hook[*RecordEvent]{},
+		onRecordCreate:             &hook.Hook[*RecordEvent]{},
+		onRecordCreateExecute:      &hook.Hook[*RecordEvent]{},
+		onRecordAfterCreateSuccess: &hook.Hook[*RecordEvent]{},
+		onRecordAfterCreateError:   &hook.Hook[*RecordErrorEvent]{},
+		onRecordUpdate:             &hook.Hook[*RecordEvent]{},
+		onRecordUpdateExecute:      &hook.Hook[*RecordEvent]{},
+		onRecordAfterUpdateSuccess: &hook.Hook[*RecordEvent]{},
+		onRecordAfterUpdateError:   &hook.Hook[*RecordErrorEvent]{},
+		onRecordDelete:             &hook.Hook[*RecordEvent]{},
+		onRecordDeleteExecute:      &hook.Hook[*RecordEvent]{},
+		onRecordAfterDeleteSuccess: &hook.Hook[*RecordEvent]{},
+		onRecordAfterDeleteError:   &hook.Hook[*RecordErrorEvent]{},
 
-	// db collection hooks
-	app.onCollectionValidate = &hook.Hook[*CollectionEvent]{}
-	app.onCollectionCreate = &hook.Hook[*CollectionEvent]{}
-	app.onCollectionCreateExecute = &hook.Hook[*CollectionEvent]{}
-	app.onCollectionAfterCreateSuccess = &hook.Hook[*CollectionEvent]{}
-	app.onCollectionAfterCreateError = &hook.Hook[*CollectionErrorEvent]{}
-	app.onCollectionUpdate = &hook.Hook[*CollectionEvent]{}
-	app.onCollectionUpdateExecute = &hook.Hook[*CollectionEvent]{}
-	app.onCollectionAfterUpdateSuccess = &hook.Hook[*CollectionEvent]{}
-	app.onCollectionAfterUpdateError = &hook.Hook[*CollectionErrorEvent]{}
-	app.onCollectionDelete = &hook.Hook[*CollectionEvent]{}
-	app.onCollectionAfterDeleteSuccess = &hook.Hook[*CollectionEvent]{}
-	app.onCollectionDeleteExecute = &hook.Hook[*CollectionEvent]{}
-	app.onCollectionAfterDeleteError = &hook.Hook[*CollectionErrorEvent]{}
+		// db collection hooks
+		onCollectionValidate:           &hook.Hook[*CollectionEvent]{},
+		onCollectionCreate:             &hook.Hook[*CollectionEvent]{},
+		onCollectionCreateExecute:      &hook.Hook[*CollectionEvent]{},
+		onCollectionAfterCreateSuccess: &hook.Hook[*CollectionEvent]{},
+		onCollectionAfterCreateError:   &hook.Hook[*CollectionErrorEvent]{},
+		onCollectionUpdate:             &hook.Hook[*CollectionEvent]{},
+		onCollectionUpdateExecute:      &hook.Hook[*CollectionEvent]{},
+		onCollectionAfterUpdateSuccess: &hook.Hook[*CollectionEvent]{},
+		onCollectionAfterUpdateError:   &hook.Hook[*CollectionErrorEvent]{},
+		onCollectionDelete:             &hook.Hook[*CollectionEvent]{},
+		onCollectionAfterDeleteSuccess: &hook.Hook[*CollectionEvent]{},
+		onCollectionDeleteExecute:      &hook.Hook[*CollectionEvent]{},
+		onCollectionAfterDeleteError:   &hook.Hook[*CollectionErrorEvent]{},
 
-	// mailer event hooks
-	app.onMailerSend = &hook.Hook[*MailerEvent]{}
-	app.onMailerRecordPasswordResetSend = &hook.Hook[*MailerRecordEvent]{}
-	app.onMailerRecordVerificationSend = &hook.Hook[*MailerRecordEvent]{}
-	app.onMailerRecordEmailChangeSend = &hook.Hook[*MailerRecordEvent]{}
-	app.onMailerRecordOTPSend = &hook.Hook[*MailerRecordEvent]{}
-	app.onMailerRecordAuthAlertSend = &hook.Hook[*MailerRecordEvent]{}
+		// mailer event hooks
+		onMailerSend:                    &hook.Hook[*MailerEvent]{},
+		onMailerRecordPasswordResetSend: &hook.Hook[*MailerRecordEvent]{},
+		onMailerRecordVerificationSend:  &hook.Hook[*MailerRecordEvent]{},
+		onMailerRecordEmailChangeSend:   &hook.Hook[*MailerRecordEvent]{},
+		onMailerRecordOTPSend:           &hook.Hook[*MailerRecordEvent]{},
+		onMailerRecordAuthAlertSend:     &hook.Hook[*MailerRecordEvent]{},
 
-	// filesystem event hooks
-	app._onFilesystemNewWriter = &hook.Hook[*FilesystemNewWriterEvent]{}
-	app._onFilesystemDelete = &hook.Hook[*FilesystemDeleteEvent]{}
+		// filesystem event hooks
+		_onFilesystemNewWriter: &hook.Hook[*FilesystemNewWriterEvent]{},
+		_onFilesystemDelete:    &hook.Hook[*FilesystemDeleteEvent]{},
 
-	// realtime API event hooks
-	app.onRealtimeConnectRequest = &hook.Hook[*RealtimeConnectRequestEvent]{}
-	app.onRealtimeMessageSend = &hook.Hook[*RealtimeMessageEvent]{}
-	app.onRealtimeSubscribeRequest = &hook.Hook[*RealtimeSubscribeRequestEvent]{}
+		// realtime API event hooks
+		onRealtimeConnectRequest:   &hook.Hook[*RealtimeConnectRequestEvent]{},
+		onRealtimeMessageSend:      &hook.Hook[*RealtimeMessageEvent]{},
+		onRealtimeSubscribeRequest: &hook.Hook[*RealtimeSubscribeRequestEvent]{},
 
-	// settings event hooks
-	app.onSettingsListRequest = &hook.Hook[*SettingsListRequestEvent]{}
-	app.onSettingsUpdateRequest = &hook.Hook[*SettingsUpdateRequestEvent]{}
-	app.onSettingsReload = &hook.Hook[*SettingsReloadEvent]{}
+		// settings event hooks
+		onSettingsListRequest:   &hook.Hook[*SettingsListRequestEvent]{},
+		onSettingsUpdateRequest: &hook.Hook[*SettingsUpdateRequestEvent]{},
+		onSettingsReload:        &hook.Hook[*SettingsReloadEvent]{},
 
-	// file API event hooks
-	app.onFileDownloadRequest = &hook.Hook[*FileDownloadRequestEvent]{}
-	app.onFileTokenRequest = &hook.Hook[*FileTokenRequestEvent]{}
+		// file API event hooks
+		onFileDownloadRequest: &hook.Hook[*FileDownloadRequestEvent]{},
+		onFileTokenRequest:    &hook.Hook[*FileTokenRequestEvent]{},
 
-	// record auth API event hooks
-	app.onRecordAuthRequest = &hook.Hook[*RecordAuthRequestEvent]{}
-	app.onRecordAuthWithPasswordRequest = &hook.Hook[*RecordAuthWithPasswordRequestEvent]{}
-	app.onRecordAuthWithOAuth2Request = &hook.Hook[*RecordAuthWithOAuth2RequestEvent]{}
-	app.onRecordAuthRefreshRequest = &hook.Hook[*RecordAuthRefreshRequestEvent]{}
-	app.onRecordRequestPasswordResetRequest = &hook.Hook[*RecordRequestPasswordResetRequestEvent]{}
-	app.onRecordConfirmPasswordResetRequest = &hook.Hook[*RecordConfirmPasswordResetRequestEvent]{}
-	app.onRecordRequestVerificationRequest = &hook.Hook[*RecordRequestVerificationRequestEvent]{}
-	app.onRecordConfirmVerificationRequest = &hook.Hook[*RecordConfirmVerificationRequestEvent]{}
-	app.onRecordRequestEmailChangeRequest = &hook.Hook[*RecordRequestEmailChangeRequestEvent]{}
-	app.onRecordConfirmEmailChangeRequest = &hook.Hook[*RecordConfirmEmailChangeRequestEvent]{}
-	app.onRecordRequestOTPRequest = &hook.Hook[*RecordCreateOTPRequestEvent]{}
-	app.onRecordAuthWithOTPRequest = &hook.Hook[*RecordAuthWithOTPRequestEvent]{}
+		// record auth API event hooks
+		onRecordAuthRequest:                 &hook.Hook[*RecordAuthRequestEvent]{},
+		onRecordAuthWithPasswordRequest:     &hook.Hook[*RecordAuthWithPasswordRequestEvent]{},
+		onRecordAuthWithOAuth2Request:       &hook.Hook[*RecordAuthWithOAuth2RequestEvent]{},
+		onRecordAuthRefreshRequest:          &hook.Hook[*RecordAuthRefreshRequestEvent]{},
+		onRecordRequestPasswordResetRequest: &hook.Hook[*RecordRequestPasswordResetRequestEvent]{},
+		onRecordConfirmPasswordResetRequest: &hook.Hook[*RecordConfirmPasswordResetRequestEvent]{},
+		onRecordRequestVerificationRequest:  &hook.Hook[*RecordRequestVerificationRequestEvent]{},
+		onRecordConfirmVerificationRequest:  &hook.Hook[*RecordConfirmVerificationRequestEvent]{},
+		onRecordRequestEmailChangeRequest:   &hook.Hook[*RecordRequestEmailChangeRequestEvent]{},
+		onRecordConfirmEmailChangeRequest:   &hook.Hook[*RecordConfirmEmailChangeRequestEvent]{},
+		onRecordRequestOTPRequest:           &hook.Hook[*RecordCreateOTPRequestEvent]{},
+		onRecordAuthWithOTPRequest:          &hook.Hook[*RecordAuthWithOTPRequestEvent]{},
 
-	// record crud API event hooks
-	app.onRecordsListRequest = &hook.Hook[*RecordsListRequestEvent]{}
-	app.onRecordViewRequest = &hook.Hook[*RecordRequestEvent]{}
-	app.onRecordCreateRequest = &hook.Hook[*RecordRequestEvent]{}
-	app.onRecordUpdateRequest = &hook.Hook[*RecordRequestEvent]{}
-	app.onRecordDeleteRequest = &hook.Hook[*RecordRequestEvent]{}
+		// record crud API event hooks
+		onRecordsListRequest:  &hook.Hook[*RecordsListRequestEvent]{},
+		onRecordViewRequest:   &hook.Hook[*RecordRequestEvent]{},
+		onRecordCreateRequest: &hook.Hook[*RecordRequestEvent]{},
+		onRecordUpdateRequest: &hook.Hook[*RecordRequestEvent]{},
+		onRecordDeleteRequest: &hook.Hook[*RecordRequestEvent]{},
 
-	// collection API event hooks
-	app.onCollectionsListRequest = &hook.Hook[*CollectionsListRequestEvent]{}
-	app.onCollectionViewRequest = &hook.Hook[*CollectionRequestEvent]{}
-	app.onCollectionCreateRequest = &hook.Hook[*CollectionRequestEvent]{}
-	app.onCollectionUpdateRequest = &hook.Hook[*CollectionRequestEvent]{}
-	app.onCollectionDeleteRequest = &hook.Hook[*CollectionRequestEvent]{}
-	app.onCollectionsImportRequest = &hook.Hook[*CollectionsImportRequestEvent]{}
+		// collection API event hooks
+		onCollectionsListRequest:   &hook.Hook[*CollectionsListRequestEvent]{},
+		onCollectionViewRequest:    &hook.Hook[*CollectionRequestEvent]{},
+		onCollectionCreateRequest:  &hook.Hook[*CollectionRequestEvent]{},
+		onCollectionUpdateRequest:  &hook.Hook[*CollectionRequestEvent]{},
+		onCollectionDeleteRequest:  &hook.Hook[*CollectionRequestEvent]{},
+		onCollectionsImportRequest: &hook.Hook[*CollectionsImportRequestEvent]{},
 
-	app.onBatchRequest = &hook.Hook[*BatchRequestEvent]{}
+		onBatchRequest: &hook.Hook[*BatchRequestEvent]{},
+	}
 }
 
 // UnsafeWithoutHooks returns a shallow copy of the current app WITHOUT any registered hooks.
 //
 // NB! Note that using the returned app instance may cause data integrity errors
-// since the Record validations and data normalizations (including files uploads)
+// since the Record validations and data normalization (including files uploads)
 // rely on the app hooks to work.
 func (app *BaseApp) UnsafeWithoutHooks() App {
 	clone := *app
 
 	// reset all hook handlers
 	clone.initHooks()
+
+	return &clone
+}
+
+// Context returns the context associated with the current app instance.
+func (app *BaseApp) Context() context.Context {
+	return app.ctx
+}
+
+// WithContext creates a new shallow copy of the current app with its context set to the given one.
+//
+// WithContext is often used to customize the default timeouts and/or group the
+// execution duration of DB queries, transactions and any other app related operation.
+//
+// Keep in mind that this context will be used by all queries executed by the new app
+// instance meaning that technically you can provide a context.Background() for no limits.
+// Be careful with that!
+//
+// For example:
+//
+//	ctx, cancel := context.WithTimeout(app.Context(), 5*time.Second)
+//	defer cancel()
+//
+//	ctxApp := app.WithContext(ctx)
+//
+//	// run your queries using the newly created ctxApp
+//	// (in the below example both the Find and Save operations share the same context)
+//	record, err := ctxApp.FindRecordById("example", "123")
+//	record.Set("name", "abc")
+//	err = ctxApp.Save(record)
+func (app *BaseApp) WithContext(ctx context.Context) App {
+	clone := *app
+
+	clone.ctx = ctx
+
+	clone.concurrentDB = &contextDBBuilder{app.concurrentDB, ctx}
+	if app.concurrentDB == app.nonconcurrentDB {
+		clone.nonconcurrentDB = clone.concurrentDB
+	} else {
+		clone.nonconcurrentDB = &contextDBBuilder{app.nonconcurrentDB, ctx}
+	}
+
+	clone.auxConcurrentDB = &contextDBBuilder{app.auxConcurrentDB, ctx}
+	if app.auxConcurrentDB == app.auxNonconcurrentDB {
+		clone.auxNonconcurrentDB = clone.auxConcurrentDB
+	} else {
+		clone.auxNonconcurrentDB = &contextDBBuilder{app.auxNonconcurrentDB, ctx}
+	}
 
 	return &clone
 }
@@ -766,27 +826,29 @@ func (app *BaseApp) NewFilesystem() (fsys *filesystem.System, err error) {
 		return nil, err
 	}
 
+	fsys.SetContext(app.Context())
+
 	// attach delete hook
-	if app._onFilesystemDelete.Length() > 0 {
+	if app.hooks._onFilesystemDelete.Length() > 0 {
 		fsys.OnDelete().BindFunc(func(originalEvent *filesystem.DeleteEvent) error {
 			appEvent := new(FilesystemDeleteEvent)
 			appEvent.DeleteEvent = originalEvent
 			appEvent.App = app
 
-			return app._onFilesystemDelete.Trigger(appEvent, func(fde *FilesystemDeleteEvent) error {
+			return app.hooks._onFilesystemDelete.Trigger(appEvent, func(fde *FilesystemDeleteEvent) error {
 				return originalEvent.Next()
 			})
 		})
 	}
 
 	// attach write hook
-	if app._onFilesystemNewWriter.Length() > 0 {
+	if app.hooks._onFilesystemNewWriter.Length() > 0 {
 		fsys.OnNewWriter().BindFunc(func(originalEvent *filesystem.NewWriterEvent) error {
 			appEvent := new(FilesystemNewWriterEvent)
 			appEvent.NewWriterEvent = originalEvent
 			appEvent.App = app
 
-			return app._onFilesystemNewWriter.Trigger(appEvent, func(fwe *FilesystemNewWriterEvent) error {
+			return app.hooks._onFilesystemNewWriter.Trigger(appEvent, func(fwe *FilesystemNewWriterEvent) error {
 				return originalEvent.Next()
 			})
 		})
@@ -800,9 +862,9 @@ func (app *BaseApp) NewFilesystem() (fsys *filesystem.System, err error) {
 //
 // NB! Make sure to call Close() on the returned result
 // after you are done working with it.
-func (app *BaseApp) NewBackupsFilesystem() (*filesystem.System, error) {
+func (app *BaseApp) NewBackupsFilesystem() (fsys *filesystem.System, err error) {
 	if app.settings != nil && app.settings.Backups.S3.Enabled {
-		return filesystem.NewS3(
+		fsys, err = filesystem.NewS3(
 			app.settings.Backups.S3.Bucket,
 			app.settings.Backups.S3.Region,
 			app.settings.Backups.S3.Endpoint,
@@ -810,10 +872,17 @@ func (app *BaseApp) NewBackupsFilesystem() (*filesystem.System, error) {
 			app.settings.Backups.S3.Secret,
 			app.settings.Backups.S3.ForcePathStyle,
 		)
+	} else {
+		// fallback to local filesystem
+		fsys, err = filesystem.NewLocal(filepath.Join(app.DataDir(), LocalBackupsDirName))
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	// fallback to local filesystem
-	return filesystem.NewLocal(filepath.Join(app.DataDir(), LocalBackupsDirName))
+	fsys.SetContext(app.Context())
+
+	return fsys, nil
 }
 
 // Restart restarts (aka. replaces) the current running application process.
@@ -874,189 +943,189 @@ func (app *BaseApp) RunAllMigrations() error {
 // -------------------------------------------------------------------
 
 func (app *BaseApp) OnBootstrap() *hook.Hook[*BootstrapEvent] {
-	return app.onBootstrap
+	return app.hooks.onBootstrap
 }
 
 func (app *BaseApp) OnBootstrapClear() *hook.Hook[*BootstrapEvent] {
-	return app.onBootstrapClear
+	return app.hooks.onBootstrapClear
 }
 
 func (app *BaseApp) OnServe() *hook.Hook[*ServeEvent] {
-	return app.onServe
+	return app.hooks.onServe
 }
 
 func (app *BaseApp) OnTerminate() *hook.Hook[*TerminateEvent] {
-	return app.onTerminate
+	return app.hooks.onTerminate
 }
 
 func (app *BaseApp) OnBackupCreate() *hook.Hook[*BackupEvent] {
-	return app.onBackupCreate
+	return app.hooks.onBackupCreate
 }
 
 func (app *BaseApp) OnBackupRestore() *hook.Hook[*BackupEvent] {
-	return app.onBackupRestore
+	return app.hooks.onBackupRestore
 }
 
 // ---------------------------------------------------------------
 
 func (app *BaseApp) OnModelCreate(tags ...string) *hook.TaggedHook[*ModelEvent] {
-	return hook.NewTaggedHook(app.onModelCreate, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelCreate, tags...)
 }
 
 func (app *BaseApp) OnModelCreateExecute(tags ...string) *hook.TaggedHook[*ModelEvent] {
-	return hook.NewTaggedHook(app.onModelCreateExecute, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelCreateExecute, tags...)
 }
 
 func (app *BaseApp) OnModelAfterCreateSuccess(tags ...string) *hook.TaggedHook[*ModelEvent] {
-	return hook.NewTaggedHook(app.onModelAfterCreateSuccess, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelAfterCreateSuccess, tags...)
 }
 
 func (app *BaseApp) OnModelAfterCreateError(tags ...string) *hook.TaggedHook[*ModelErrorEvent] {
-	return hook.NewTaggedHook(app.onModelAfterCreateError, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelAfterCreateError, tags...)
 }
 
 func (app *BaseApp) OnModelUpdate(tags ...string) *hook.TaggedHook[*ModelEvent] {
-	return hook.NewTaggedHook(app.onModelUpdate, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelUpdate, tags...)
 }
 
 func (app *BaseApp) OnModelUpdateExecute(tags ...string) *hook.TaggedHook[*ModelEvent] {
-	return hook.NewTaggedHook(app.onModelUpdateWrite, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelUpdateWrite, tags...)
 }
 
 func (app *BaseApp) OnModelAfterUpdateSuccess(tags ...string) *hook.TaggedHook[*ModelEvent] {
-	return hook.NewTaggedHook(app.onModelAfterUpdateSuccess, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelAfterUpdateSuccess, tags...)
 }
 
 func (app *BaseApp) OnModelAfterUpdateError(tags ...string) *hook.TaggedHook[*ModelErrorEvent] {
-	return hook.NewTaggedHook(app.onModelAfterUpdateError, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelAfterUpdateError, tags...)
 }
 
 func (app *BaseApp) OnModelValidate(tags ...string) *hook.TaggedHook[*ModelEvent] {
-	return hook.NewTaggedHook(app.onModelValidate, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelValidate, tags...)
 }
 
 func (app *BaseApp) OnModelDelete(tags ...string) *hook.TaggedHook[*ModelEvent] {
-	return hook.NewTaggedHook(app.onModelDelete, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelDelete, tags...)
 }
 
 func (app *BaseApp) OnModelDeleteExecute(tags ...string) *hook.TaggedHook[*ModelEvent] {
-	return hook.NewTaggedHook(app.onModelDeleteExecute, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelDeleteExecute, tags...)
 }
 
 func (app *BaseApp) OnModelAfterDeleteSuccess(tags ...string) *hook.TaggedHook[*ModelEvent] {
-	return hook.NewTaggedHook(app.onModelAfterDeleteSuccess, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelAfterDeleteSuccess, tags...)
 }
 
 func (app *BaseApp) OnModelAfterDeleteError(tags ...string) *hook.TaggedHook[*ModelErrorEvent] {
-	return hook.NewTaggedHook(app.onModelAfterDeleteError, tags...)
+	return hook.NewTaggedHook(app.hooks.onModelAfterDeleteError, tags...)
 }
 
 func (app *BaseApp) OnRecordEnrich(tags ...string) *hook.TaggedHook[*RecordEnrichEvent] {
-	return hook.NewTaggedHook(app.onRecordEnrich, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordEnrich, tags...)
 }
 
 func (app *BaseApp) OnRecordValidate(tags ...string) *hook.TaggedHook[*RecordEvent] {
-	return hook.NewTaggedHook(app.onRecordValidate, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordValidate, tags...)
 }
 
 func (app *BaseApp) OnRecordCreate(tags ...string) *hook.TaggedHook[*RecordEvent] {
-	return hook.NewTaggedHook(app.onRecordCreate, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordCreate, tags...)
 }
 
 func (app *BaseApp) OnRecordCreateExecute(tags ...string) *hook.TaggedHook[*RecordEvent] {
-	return hook.NewTaggedHook(app.onRecordCreateExecute, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordCreateExecute, tags...)
 }
 
 func (app *BaseApp) OnRecordAfterCreateSuccess(tags ...string) *hook.TaggedHook[*RecordEvent] {
-	return hook.NewTaggedHook(app.onRecordAfterCreateSuccess, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordAfterCreateSuccess, tags...)
 }
 
 func (app *BaseApp) OnRecordAfterCreateError(tags ...string) *hook.TaggedHook[*RecordErrorEvent] {
-	return hook.NewTaggedHook(app.onRecordAfterCreateError, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordAfterCreateError, tags...)
 }
 
 func (app *BaseApp) OnRecordUpdate(tags ...string) *hook.TaggedHook[*RecordEvent] {
-	return hook.NewTaggedHook(app.onRecordUpdate, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordUpdate, tags...)
 }
 
 func (app *BaseApp) OnRecordUpdateExecute(tags ...string) *hook.TaggedHook[*RecordEvent] {
-	return hook.NewTaggedHook(app.onRecordUpdateExecute, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordUpdateExecute, tags...)
 }
 
 func (app *BaseApp) OnRecordAfterUpdateSuccess(tags ...string) *hook.TaggedHook[*RecordEvent] {
-	return hook.NewTaggedHook(app.onRecordAfterUpdateSuccess, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordAfterUpdateSuccess, tags...)
 }
 
 func (app *BaseApp) OnRecordAfterUpdateError(tags ...string) *hook.TaggedHook[*RecordErrorEvent] {
-	return hook.NewTaggedHook(app.onRecordAfterUpdateError, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordAfterUpdateError, tags...)
 }
 
 func (app *BaseApp) OnRecordDelete(tags ...string) *hook.TaggedHook[*RecordEvent] {
-	return hook.NewTaggedHook(app.onRecordDelete, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordDelete, tags...)
 }
 
 func (app *BaseApp) OnRecordDeleteExecute(tags ...string) *hook.TaggedHook[*RecordEvent] {
-	return hook.NewTaggedHook(app.onRecordDeleteExecute, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordDeleteExecute, tags...)
 }
 
 func (app *BaseApp) OnRecordAfterDeleteSuccess(tags ...string) *hook.TaggedHook[*RecordEvent] {
-	return hook.NewTaggedHook(app.onRecordAfterDeleteSuccess, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordAfterDeleteSuccess, tags...)
 }
 
 func (app *BaseApp) OnRecordAfterDeleteError(tags ...string) *hook.TaggedHook[*RecordErrorEvent] {
-	return hook.NewTaggedHook(app.onRecordAfterDeleteError, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordAfterDeleteError, tags...)
 }
 
 func (app *BaseApp) OnCollectionValidate(tags ...string) *hook.TaggedHook[*CollectionEvent] {
-	return hook.NewTaggedHook(app.onCollectionValidate, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionValidate, tags...)
 }
 
 func (app *BaseApp) OnCollectionCreate(tags ...string) *hook.TaggedHook[*CollectionEvent] {
-	return hook.NewTaggedHook(app.onCollectionCreate, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionCreate, tags...)
 }
 
 func (app *BaseApp) OnCollectionCreateExecute(tags ...string) *hook.TaggedHook[*CollectionEvent] {
-	return hook.NewTaggedHook(app.onCollectionCreateExecute, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionCreateExecute, tags...)
 }
 
 func (app *BaseApp) OnCollectionAfterCreateSuccess(tags ...string) *hook.TaggedHook[*CollectionEvent] {
-	return hook.NewTaggedHook(app.onCollectionAfterCreateSuccess, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionAfterCreateSuccess, tags...)
 }
 
 func (app *BaseApp) OnCollectionAfterCreateError(tags ...string) *hook.TaggedHook[*CollectionErrorEvent] {
-	return hook.NewTaggedHook(app.onCollectionAfterCreateError, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionAfterCreateError, tags...)
 }
 
 func (app *BaseApp) OnCollectionUpdate(tags ...string) *hook.TaggedHook[*CollectionEvent] {
-	return hook.NewTaggedHook(app.onCollectionUpdate, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionUpdate, tags...)
 }
 
 func (app *BaseApp) OnCollectionUpdateExecute(tags ...string) *hook.TaggedHook[*CollectionEvent] {
-	return hook.NewTaggedHook(app.onCollectionUpdateExecute, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionUpdateExecute, tags...)
 }
 
 func (app *BaseApp) OnCollectionAfterUpdateSuccess(tags ...string) *hook.TaggedHook[*CollectionEvent] {
-	return hook.NewTaggedHook(app.onCollectionAfterUpdateSuccess, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionAfterUpdateSuccess, tags...)
 }
 
 func (app *BaseApp) OnCollectionAfterUpdateError(tags ...string) *hook.TaggedHook[*CollectionErrorEvent] {
-	return hook.NewTaggedHook(app.onCollectionAfterUpdateError, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionAfterUpdateError, tags...)
 }
 
 func (app *BaseApp) OnCollectionDelete(tags ...string) *hook.TaggedHook[*CollectionEvent] {
-	return hook.NewTaggedHook(app.onCollectionDelete, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionDelete, tags...)
 }
 
 func (app *BaseApp) OnCollectionDeleteExecute(tags ...string) *hook.TaggedHook[*CollectionEvent] {
-	return hook.NewTaggedHook(app.onCollectionDeleteExecute, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionDeleteExecute, tags...)
 }
 
 func (app *BaseApp) OnCollectionAfterDeleteSuccess(tags ...string) *hook.TaggedHook[*CollectionEvent] {
-	return hook.NewTaggedHook(app.onCollectionAfterDeleteSuccess, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionAfterDeleteSuccess, tags...)
 }
 
 func (app *BaseApp) OnCollectionAfterDeleteError(tags ...string) *hook.TaggedHook[*CollectionErrorEvent] {
-	return hook.NewTaggedHook(app.onCollectionAfterDeleteError, tags...)
+	return hook.NewTaggedHook(app.hooks.onCollectionAfterDeleteError, tags...)
 }
 
 // -------------------------------------------------------------------
@@ -1064,27 +1133,27 @@ func (app *BaseApp) OnCollectionAfterDeleteError(tags ...string) *hook.TaggedHoo
 // -------------------------------------------------------------------
 
 func (app *BaseApp) OnMailerSend() *hook.Hook[*MailerEvent] {
-	return app.onMailerSend
+	return app.hooks.onMailerSend
 }
 
 func (app *BaseApp) OnMailerRecordPasswordResetSend(tags ...string) *hook.TaggedHook[*MailerRecordEvent] {
-	return hook.NewTaggedHook(app.onMailerRecordPasswordResetSend, tags...)
+	return hook.NewTaggedHook(app.hooks.onMailerRecordPasswordResetSend, tags...)
 }
 
 func (app *BaseApp) OnMailerRecordVerificationSend(tags ...string) *hook.TaggedHook[*MailerRecordEvent] {
-	return hook.NewTaggedHook(app.onMailerRecordVerificationSend, tags...)
+	return hook.NewTaggedHook(app.hooks.onMailerRecordVerificationSend, tags...)
 }
 
 func (app *BaseApp) OnMailerRecordEmailChangeSend(tags ...string) *hook.TaggedHook[*MailerRecordEvent] {
-	return hook.NewTaggedHook(app.onMailerRecordEmailChangeSend, tags...)
+	return hook.NewTaggedHook(app.hooks.onMailerRecordEmailChangeSend, tags...)
 }
 
 func (app *BaseApp) OnMailerRecordOTPSend(tags ...string) *hook.TaggedHook[*MailerRecordEvent] {
-	return hook.NewTaggedHook(app.onMailerRecordOTPSend, tags...)
+	return hook.NewTaggedHook(app.hooks.onMailerRecordOTPSend, tags...)
 }
 
 func (app *BaseApp) OnMailerRecordAuthAlertSend(tags ...string) *hook.TaggedHook[*MailerRecordEvent] {
-	return hook.NewTaggedHook(app.onMailerRecordAuthAlertSend, tags...)
+	return hook.NewTaggedHook(app.hooks.onMailerRecordAuthAlertSend, tags...)
 }
 
 // -------------------------------------------------------------------
@@ -1092,11 +1161,11 @@ func (app *BaseApp) OnMailerRecordAuthAlertSend(tags ...string) *hook.TaggedHook
 // -------------------------------------------------------------------
 
 func (app *BaseApp) onFilesystemNewWriter() *hook.Hook[*FilesystemNewWriterEvent] {
-	return app._onFilesystemNewWriter
+	return app.hooks._onFilesystemNewWriter
 }
 
 func (app *BaseApp) onFilesystemDelete() *hook.Hook[*FilesystemDeleteEvent] {
-	return app._onFilesystemDelete
+	return app.hooks._onFilesystemDelete
 }
 
 // -------------------------------------------------------------------
@@ -1104,15 +1173,15 @@ func (app *BaseApp) onFilesystemDelete() *hook.Hook[*FilesystemDeleteEvent] {
 // -------------------------------------------------------------------
 
 func (app *BaseApp) OnRealtimeConnectRequest() *hook.Hook[*RealtimeConnectRequestEvent] {
-	return app.onRealtimeConnectRequest
+	return app.hooks.onRealtimeConnectRequest
 }
 
 func (app *BaseApp) OnRealtimeMessageSend() *hook.Hook[*RealtimeMessageEvent] {
-	return app.onRealtimeMessageSend
+	return app.hooks.onRealtimeMessageSend
 }
 
 func (app *BaseApp) OnRealtimeSubscribeRequest() *hook.Hook[*RealtimeSubscribeRequestEvent] {
-	return app.onRealtimeSubscribeRequest
+	return app.hooks.onRealtimeSubscribeRequest
 }
 
 // -------------------------------------------------------------------
@@ -1120,15 +1189,15 @@ func (app *BaseApp) OnRealtimeSubscribeRequest() *hook.Hook[*RealtimeSubscribeRe
 // -------------------------------------------------------------------
 
 func (app *BaseApp) OnSettingsListRequest() *hook.Hook[*SettingsListRequestEvent] {
-	return app.onSettingsListRequest
+	return app.hooks.onSettingsListRequest
 }
 
 func (app *BaseApp) OnSettingsUpdateRequest() *hook.Hook[*SettingsUpdateRequestEvent] {
-	return app.onSettingsUpdateRequest
+	return app.hooks.onSettingsUpdateRequest
 }
 
 func (app *BaseApp) OnSettingsReload() *hook.Hook[*SettingsReloadEvent] {
-	return app.onSettingsReload
+	return app.hooks.onSettingsReload
 }
 
 // -------------------------------------------------------------------
@@ -1136,11 +1205,11 @@ func (app *BaseApp) OnSettingsReload() *hook.Hook[*SettingsReloadEvent] {
 // -------------------------------------------------------------------
 
 func (app *BaseApp) OnFileDownloadRequest(tags ...string) *hook.TaggedHook[*FileDownloadRequestEvent] {
-	return hook.NewTaggedHook(app.onFileDownloadRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onFileDownloadRequest, tags...)
 }
 
 func (app *BaseApp) OnFileTokenRequest(tags ...string) *hook.TaggedHook[*FileTokenRequestEvent] {
-	return hook.NewTaggedHook(app.onFileTokenRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onFileTokenRequest, tags...)
 }
 
 // -------------------------------------------------------------------
@@ -1148,51 +1217,51 @@ func (app *BaseApp) OnFileTokenRequest(tags ...string) *hook.TaggedHook[*FileTok
 // -------------------------------------------------------------------
 
 func (app *BaseApp) OnRecordAuthRequest(tags ...string) *hook.TaggedHook[*RecordAuthRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordAuthRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordAuthRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordAuthWithPasswordRequest(tags ...string) *hook.TaggedHook[*RecordAuthWithPasswordRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordAuthWithPasswordRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordAuthWithPasswordRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordAuthWithOAuth2Request(tags ...string) *hook.TaggedHook[*RecordAuthWithOAuth2RequestEvent] {
-	return hook.NewTaggedHook(app.onRecordAuthWithOAuth2Request, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordAuthWithOAuth2Request, tags...)
 }
 
 func (app *BaseApp) OnRecordAuthRefreshRequest(tags ...string) *hook.TaggedHook[*RecordAuthRefreshRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordAuthRefreshRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordAuthRefreshRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordRequestPasswordResetRequest(tags ...string) *hook.TaggedHook[*RecordRequestPasswordResetRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordRequestPasswordResetRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordRequestPasswordResetRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordConfirmPasswordResetRequest(tags ...string) *hook.TaggedHook[*RecordConfirmPasswordResetRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordConfirmPasswordResetRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordConfirmPasswordResetRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordRequestVerificationRequest(tags ...string) *hook.TaggedHook[*RecordRequestVerificationRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordRequestVerificationRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordRequestVerificationRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordConfirmVerificationRequest(tags ...string) *hook.TaggedHook[*RecordConfirmVerificationRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordConfirmVerificationRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordConfirmVerificationRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordRequestEmailChangeRequest(tags ...string) *hook.TaggedHook[*RecordRequestEmailChangeRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordRequestEmailChangeRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordRequestEmailChangeRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordConfirmEmailChangeRequest(tags ...string) *hook.TaggedHook[*RecordConfirmEmailChangeRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordConfirmEmailChangeRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordConfirmEmailChangeRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordRequestOTPRequest(tags ...string) *hook.TaggedHook[*RecordCreateOTPRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordRequestOTPRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordRequestOTPRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordAuthWithOTPRequest(tags ...string) *hook.TaggedHook[*RecordAuthWithOTPRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordAuthWithOTPRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordAuthWithOTPRequest, tags...)
 }
 
 // -------------------------------------------------------------------
@@ -1200,23 +1269,23 @@ func (app *BaseApp) OnRecordAuthWithOTPRequest(tags ...string) *hook.TaggedHook[
 // -------------------------------------------------------------------
 
 func (app *BaseApp) OnRecordsListRequest(tags ...string) *hook.TaggedHook[*RecordsListRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordsListRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordsListRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordViewRequest(tags ...string) *hook.TaggedHook[*RecordRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordViewRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordViewRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordCreateRequest(tags ...string) *hook.TaggedHook[*RecordRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordCreateRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordCreateRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordUpdateRequest(tags ...string) *hook.TaggedHook[*RecordRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordUpdateRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordUpdateRequest, tags...)
 }
 
 func (app *BaseApp) OnRecordDeleteRequest(tags ...string) *hook.TaggedHook[*RecordRequestEvent] {
-	return hook.NewTaggedHook(app.onRecordDeleteRequest, tags...)
+	return hook.NewTaggedHook(app.hooks.onRecordDeleteRequest, tags...)
 }
 
 // -------------------------------------------------------------------
@@ -1224,31 +1293,31 @@ func (app *BaseApp) OnRecordDeleteRequest(tags ...string) *hook.TaggedHook[*Reco
 // -------------------------------------------------------------------
 
 func (app *BaseApp) OnCollectionsListRequest() *hook.Hook[*CollectionsListRequestEvent] {
-	return app.onCollectionsListRequest
+	return app.hooks.onCollectionsListRequest
 }
 
 func (app *BaseApp) OnCollectionViewRequest() *hook.Hook[*CollectionRequestEvent] {
-	return app.onCollectionViewRequest
+	return app.hooks.onCollectionViewRequest
 }
 
 func (app *BaseApp) OnCollectionCreateRequest() *hook.Hook[*CollectionRequestEvent] {
-	return app.onCollectionCreateRequest
+	return app.hooks.onCollectionCreateRequest
 }
 
 func (app *BaseApp) OnCollectionUpdateRequest() *hook.Hook[*CollectionRequestEvent] {
-	return app.onCollectionUpdateRequest
+	return app.hooks.onCollectionUpdateRequest
 }
 
 func (app *BaseApp) OnCollectionDeleteRequest() *hook.Hook[*CollectionRequestEvent] {
-	return app.onCollectionDeleteRequest
+	return app.hooks.onCollectionDeleteRequest
 }
 
 func (app *BaseApp) OnCollectionsImportRequest() *hook.Hook[*CollectionsImportRequestEvent] {
-	return app.onCollectionsImportRequest
+	return app.hooks.onCollectionsImportRequest
 }
 
 func (app *BaseApp) OnBatchRequest() *hook.Hook[*BatchRequestEvent] {
-	return app.onBatchRequest
+	return app.hooks.onBatchRequest
 }
 
 // -------------------------------------------------------------------
@@ -1262,6 +1331,7 @@ func (app *BaseApp) initDataDB() error {
 	if err != nil {
 		return err
 	}
+	concurrentDB = concurrentDB.WithContext(app.Context())
 	concurrentDB.DB().SetMaxOpenConns(app.config.DataMaxOpenConns)
 	concurrentDB.DB().SetMaxIdleConns(app.config.DataMaxIdleConns)
 	concurrentDB.DB().SetConnMaxIdleTime(3 * time.Minute)
@@ -1270,6 +1340,7 @@ func (app *BaseApp) initDataDB() error {
 	if err != nil {
 		return err
 	}
+	nonconcurrentDB = nonconcurrentDB.WithContext(app.Context())
 	nonconcurrentDB.DB().SetMaxOpenConns(1)
 	nonconcurrentDB.DB().SetMaxIdleConns(1)
 	nonconcurrentDB.DB().SetConnMaxIdleTime(3 * time.Minute)
@@ -1324,6 +1395,7 @@ func (app *BaseApp) initAuxDB() error {
 	if err != nil {
 		return err
 	}
+	concurrentDB = concurrentDB.WithContext(app.Context())
 	concurrentDB.DB().SetMaxOpenConns(app.config.AuxMaxOpenConns)
 	concurrentDB.DB().SetMaxIdleConns(app.config.AuxMaxIdleConns)
 	concurrentDB.DB().SetConnMaxIdleTime(3 * time.Minute)
@@ -1332,6 +1404,7 @@ func (app *BaseApp) initAuxDB() error {
 	if err != nil {
 		return err
 	}
+	nonconcurrentDB = nonconcurrentDB.WithContext(app.Context())
 	nonconcurrentDB.DB().SetMaxOpenConns(1)
 	nonconcurrentDB.DB().SetMaxIdleConns(1)
 	nonconcurrentDB.DB().SetConnMaxIdleTime(3 * time.Minute)
@@ -1591,8 +1664,8 @@ func (app *BaseApp) initLogger() error {
 		Id: "__pbAppLoggerFlushBeforeStop__",
 		Func: func(e *BootstrapEvent) error {
 			// extra precaution in case the hook was manually triggered while inside aux db transaction
-			_, isTx := e.App.AuxNonconcurrentDB().(*dbx.Tx)
-			ctx := context.WithValue(context.Background(), logger.BlockKey, !isTx)
+			_, isTx := e.App.AuxNonconcurrentDB().Unwrap().(*dbx.Tx)
+			ctx := context.WithValue(e.App.Context(), logger.BlockKey, !isTx)
 			handler.WriteAll(ctx)
 
 			stopped.Store(true)

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"io/fs"
 	"net"
 	"net/http"
@@ -98,7 +97,6 @@ type TerminateEvent struct {
 type BackupEvent struct {
 	hook.Event
 	App     App
-	Context context.Context
 	Name    string   // the name of the backup to create/restore.
 	Exclude []string // list of dir entries to exclude from the backup create/restore.
 }
@@ -231,7 +229,6 @@ type ModelEvent struct {
 	hook.Event
 	App App
 	baseModelEventData
-	Context context.Context
 
 	// Could be any of the ModelEventType* constants, like:
 	// - create
@@ -254,7 +251,6 @@ type RecordEvent struct {
 	hook.Event
 	App App
 	baseRecordEventData
-	Context context.Context
 
 	// Could be any of the ModelEventType* constants, like:
 	// - create
@@ -271,7 +267,6 @@ type RecordErrorEvent struct {
 
 func syncModelEventWithRecordEvent(me *ModelEvent, re *RecordEvent) {
 	me.App = re.App
-	me.Context = re.Context
 	me.Type = re.Type
 
 	// @todo enable if after profiling doesn't have significant impact
@@ -287,7 +282,6 @@ func syncModelEventWithRecordEvent(me *ModelEvent, re *RecordEvent) {
 
 func syncRecordEventWithModelEvent(re *RecordEvent, me *ModelEvent) {
 	re.App = me.App
-	re.Context = me.Context
 	re.Type = me.Type
 }
 
@@ -303,7 +297,6 @@ func newRecordEventFromModelEvent(me *ModelEvent) (*RecordEvent, bool) {
 
 	re := new(RecordEvent)
 	re.App = me.App
-	re.Context = me.Context
 	re.Type = me.Type
 	re.Record = record
 
@@ -341,7 +334,6 @@ type CollectionEvent struct {
 	hook.Event
 	App App
 	baseCollectionEventData
-	Context context.Context
 
 	// Could be any of the ModelEventType* constants, like:
 	// - create
@@ -358,14 +350,12 @@ type CollectionErrorEvent struct {
 
 func syncModelEventWithCollectionEvent(me *ModelEvent, ce *CollectionEvent) {
 	me.App = ce.App
-	me.Context = ce.Context
 	me.Type = ce.Type
 	me.Model = ce.Collection
 }
 
 func syncCollectionEventWithModelEvent(ce *CollectionEvent, me *ModelEvent) {
 	ce.App = me.App
-	ce.Context = me.Context
 	ce.Type = me.Type
 	if c, ok := me.Model.(*Collection); ok {
 		ce.Collection = c
@@ -380,7 +370,6 @@ func newCollectionEventFromModelEvent(me *ModelEvent) (*CollectionEvent, bool) {
 
 	ce := new(CollectionEvent)
 	ce.App = me.App
-	ce.Context = me.Context
 	ce.Type = me.Type
 	ce.Collection = record
 

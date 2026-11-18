@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -47,7 +46,7 @@ import (
 // Note that if your pb_data has custom network mounts as subdirectories, then
 // it is possible the restore to fail during the `os.Rename` operations
 // (see https://ganigeorgiev.com/pocketbase/discussions/4647).
-func (app *BaseApp) RestoreBackup(ctx context.Context, name string) error {
+func (app *BaseApp) RestoreBackup(name string) error {
 	if app.Store().Has(StoreKeyActiveBackup) {
 		return errors.New("try again later - another backup/restore operation has already been started")
 	}
@@ -57,7 +56,6 @@ func (app *BaseApp) RestoreBackup(ctx context.Context, name string) error {
 
 	event := new(BackupEvent)
 	event.App = app
-	event.Context = ctx
 	event.Name = name
 	// default root dir entries to exclude from the backup restore
 	event.Exclude = []string{LocalBackupsDirName, LocalTempDirName, LocalAutocertCacheDirName, lostFoundDirName}
@@ -79,8 +77,6 @@ func (app *BaseApp) RestoreBackup(ctx context.Context, name string) error {
 			return err
 		}
 		defer fsys.Close()
-
-		fsys.SetContext(e.Context)
 
 		if ok, _ := fsys.Exists(name); !ok {
 			return fmt.Errorf("missing or invalid backup file %q to restore", name)

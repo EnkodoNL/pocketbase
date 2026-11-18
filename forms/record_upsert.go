@@ -1,7 +1,6 @@
 package forms
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -21,7 +20,6 @@ const (
 )
 
 type RecordUpsert struct {
-	ctx         context.Context
 	app         core.App
 	record      *core.Record
 	accessLevel int
@@ -37,17 +35,11 @@ type RecordUpsert struct {
 // (for create you could pass a pointer to an empty Record - core.NewRecord(collection)).
 func NewRecordUpsert(app core.App, record *core.Record) *RecordUpsert {
 	form := &RecordUpsert{
-		ctx:    context.Background(),
 		app:    app,
 		record: record,
 	}
 
 	return form
-}
-
-// SetContext assigns ctx as context of the current form.
-func (form *RecordUpsert) SetContext(ctx context.Context) {
-	form.ctx = ctx
 }
 
 // SetApp replaces the current form app instance.
@@ -230,13 +222,13 @@ func (form *RecordUpsert) DrySubmit(callback func(txApp core.App, drySavedRecord
 	isTransactional := app.IsTransactional()
 	if !isTransactional {
 		return app.RunInTransaction(func(txApp core.App) error {
-			tx, ok := txApp.DB().(*dbx.Tx)
+			tx, ok := txApp.DB().Unwrap().(*dbx.Tx)
 			if !ok {
 				return errors.New("failed to get transaction db")
 			}
 			defer tx.Rollback()
 
-			if err := txApp.SaveNoValidateWithContext(form.ctx, clone); err != nil {
+			if err := txApp.SaveNoValidate(clone); err != nil {
 				return validators.NormalizeUniqueIndexError(err, clone.Collection().Name, clone.Collection().Fields.FieldNames())
 			}
 
@@ -251,20 +243,20 @@ func (form *RecordUpsert) DrySubmit(callback func(txApp core.App, drySavedRecord
 	// already in a transaction
 	// (manual rollback to avoid starting another transaction)
 	// ---------------------------------------------------------------
-	err := app.SaveNoValidateWithContext(form.ctx, clone)
+	err := app.SaveNoValidate(clone)
 	if err != nil {
 		return validators.NormalizeUniqueIndexError(err, clone.Collection().Name, clone.Collection().Fields.FieldNames())
 	}
 
 	manualRollback := func() error {
 		if isNew {
-			err = app.DeleteWithContext(form.ctx, clone)
+			err = app.Delete(clone)
 			if err != nil {
 				return fmt.Errorf("failed to rollback dry submit created record: %w", err)
 			}
 		} else {
 			clone.Load(clone.Original().FieldsData())
-			err = app.SaveNoValidateWithContext(form.ctx, clone)
+			err = app.SaveNoValidate(clone)
 			if err != nil {
 				return fmt.Errorf("failed to rollback dry submit updated record: %w", err)
 			}
@@ -288,7 +280,7 @@ func (form *RecordUpsert) Submit() error {
 	}
 
 	// run record validations and persist in db
-	return form.app.SaveWithContext(form.ctx, form.record)
+	return form.app.Save(form.record)
 }
 
 // syncPasswordFields syncs the form's auth password fields with their

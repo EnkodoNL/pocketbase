@@ -17,14 +17,15 @@ var defaultRetryIntervals = []int{50, 100, 150, 200, 300, 400, 500, 700, 1000}
 // default max retry attempts
 const defaultMaxLockRetries = 12
 
-func execLockRetry(timeout time.Duration, maxRetries int) dbx.ExecHookFunc {
+func execLockRetry(app *BaseApp, maxRetries int) dbx.ExecHookFunc {
 	return func(q *dbx.Query, op func() error) error {
-		if q.Context() == nil {
-			cancelCtx, cancel := context.WithTimeout(context.Background(), timeout)
+		// wrap with the default timeout context if no custom context is set
+		qCtx := q.Context()
+		if qCtx == nil || qCtx == baseAppCtx {
+			cancelCtx, cancel := context.WithTimeout(app.Context(), app.config.QueryTimeout)
 			defer func() {
 				cancel()
-				//nolint:staticcheck
-				q.WithContext(nil) // reset
+				q.WithContext(qCtx) // restore
 			}()
 			q.WithContext(cancelCtx)
 		}

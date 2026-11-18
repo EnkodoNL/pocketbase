@@ -1,8 +1,6 @@
 package core
 
 import (
-	"context"
-
 	validation "ganigeorgiev.com/pocketbase/ozzo-validation/v4"
 	"ganigeorgiev.com/pocketbase/pocketbase/core/validators"
 	"github.com/spf13/cast"
@@ -106,7 +104,7 @@ func (f *BoolField) PrepareValue(record *Record, raw any) (any, error) {
 }
 
 // ValidateValue implements [Field.ValidateValue] interface method.
-func (f *BoolField) ValidateValue(ctx context.Context, app App, record *Record) error {
+func (f *BoolField) ValidateValue(app App, record *Record) error {
 	v, ok := record.GetRaw(f.Name).(bool)
 	if !ok {
 		return validators.ErrUnsupportedValueType
@@ -120,8 +118,8 @@ func (f *BoolField) ValidateValue(ctx context.Context, app App, record *Record) 
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
-func (f *BoolField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
-	return validation.ValidateStruct(f,
+func (f *BoolField) ValidateSettings(app App, collection *Collection) error {
+	return validation.ValidateStructWithContext(app.Context(), f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name, validation.By(DefaultFieldNameValidationRule)),
 		validation.Field(&f.Help, validation.By(DefaultFieldHelpValidationRule)),

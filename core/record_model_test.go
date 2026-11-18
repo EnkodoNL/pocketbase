@@ -1728,7 +1728,6 @@ func TestRecordModelEventSync(t *testing.T) {
 	createModelEvent := func() *core.ModelEvent {
 		event := new(core.ModelEvent)
 		event.App = app
-		event.Context = context.Background()
 		event.Type = "test_a"
 		event.Model = testRecords[0]
 		return event
@@ -1743,32 +1742,22 @@ func TestRecordModelEventSync(t *testing.T) {
 
 	changeRecordEventBefore := func(e *core.RecordEvent) {
 		e.Type = "test_b"
-		//nolint:staticcheck
-		e.Context = context.WithValue(context.Background(), "test", 123)
 		e.Record = testRecords[1]
 	}
 
 	modelEventFinalizerChange := func(e *core.ModelEvent) {
 		e.Type = "test_c"
-		//nolint:staticcheck
-		e.Context = context.WithValue(context.Background(), "test", 456)
 		e.Model = testRecords[2]
 	}
 
 	changeRecordEventAfter := func(e *core.RecordEvent) {
 		e.Type = "test_d"
-		//nolint:staticcheck
-		e.Context = context.WithValue(context.Background(), "test", 789)
 		e.Record = testRecords[3]
 	}
 
 	expectedBeforeModelEventHandlerChecks := func(t *testing.T, e *core.ModelEvent) {
 		if e.Type != "test_a" {
 			t.Fatalf("Expected type %q, got %q", "test_a", e.Type)
-		}
-
-		if v := e.Context.Value("test"); v != nil {
-			t.Fatalf("Expected context value %v, got %v", nil, v)
 		}
 
 		if e.Model.PK() != testRecords[0].Id {
@@ -1779,10 +1768,6 @@ func TestRecordModelEventSync(t *testing.T) {
 	expectedAfterModelEventHandlerChecks := func(t *testing.T, e *core.ModelEvent) {
 		if e.Type != "test_d" {
 			t.Fatalf("Expected type %q, got %q", "test_d", e.Type)
-		}
-
-		if v := e.Context.Value("test"); v != 789 {
-			t.Fatalf("Expected context value %v, got %v", 789, v)
 		}
 
 		// note: currently the Model and Record values are not synced due to performance consideration
@@ -1796,10 +1781,6 @@ func TestRecordModelEventSync(t *testing.T) {
 			t.Fatalf("Expected type %q, got %q", "test_a", e.Type)
 		}
 
-		if v := e.Context.Value("test"); v != nil {
-			t.Fatalf("Expected context value %v, got %v", nil, v)
-		}
-
 		if e.Record.Id != testRecords[0].Id {
 			t.Fatalf("Expected record with id %q, got %q (%d)", testRecords[0].Id, e.Record.Id, 2)
 		}
@@ -1808,10 +1789,6 @@ func TestRecordModelEventSync(t *testing.T) {
 	expectedAfterRecordEventHandlerChecks := func(t *testing.T, e *core.RecordEvent) {
 		if e.Type != "test_c" {
 			t.Fatalf("Expected type %q, got %q", "test_c", e.Type)
-		}
-
-		if v := e.Context.Value("test"); v != 456 {
-			t.Fatalf("Expected context value %v, got %v", 456, v)
 		}
 
 		// note: currently the Model and Record values are not synced due to performance consideration

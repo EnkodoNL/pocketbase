@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 
 	validation "ganigeorgiev.com/pocketbase/ozzo-validation/v4"
@@ -50,7 +49,7 @@ func NewExternalAuth(app App) *ExternalAuth {
 
 // PreValidate implements the [PreValidator] interface and checks
 // whether the proxy is properly loaded.
-func (m *ExternalAuth) PreValidate(ctx context.Context, app App) error {
+func (m *ExternalAuth) PreValidate(app App) error {
 	if m.Record == nil || m.Record.Collection().Name != CollectionNameExternalAuths {
 		return errors.New("missing or invalid ExternalAuth ProxyRecord")
 	}

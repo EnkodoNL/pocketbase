@@ -98,8 +98,8 @@ func executeQuery(app core.App, query string, maxRows int) (*runSQLResult, error
 		}
 	}
 
-	// note: don't extend the request context to minimize the risk of
-	// causing integrity issues with custom non-transaction mutations
+	// note: don't extend the request or app context to minimize the risk
+	// of causing integrity issues with custom non-transaction mutations
 	ctx, cancelFunc := context.WithTimeout(context.Background(), runSQLMaxTimeout)
 	defer cancelFunc()
 

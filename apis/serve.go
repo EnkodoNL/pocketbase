@@ -139,7 +139,7 @@ func Serve(app core.App, config ServeConfig) error {
 
 	// base request context used for cancelling long running requests
 	// like the SSE connections
-	baseCtx, cancelBaseCtx := context.WithCancel(context.Background())
+	baseCtx, cancelBaseCtx := context.WithCancel(app.Context())
 	defer cancelBaseCtx()
 
 	server := &http.Server{

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"database/sql/driver"
 	"fmt"
 	"regexp"
@@ -161,7 +160,7 @@ func (f *PasswordField) PrepareValue(record *Record, raw any) (any, error) {
 }
 
 // ValidateValue implements [Field.ValidateValue] interface method.
-func (f *PasswordField) ValidateValue(ctx context.Context, app App, record *Record) error {
+func (f *PasswordField) ValidateValue(app App, record *Record) error {
 	fp, ok := record.GetRaw(f.Name).(*PasswordFieldValue)
 	if !ok {
 		return validators.ErrUnsupportedValueType
@@ -211,8 +210,8 @@ func (f *PasswordField) ValidateValue(ctx context.Context, app App, record *Reco
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
-func (f *PasswordField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
-	return validation.ValidateStruct(f,
+func (f *PasswordField) ValidateSettings(app App, collection *Collection) error {
+	return validation.ValidateStructWithContext(app.Context(), f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name, validation.By(DefaultFieldNameValidationRule)),
 		validation.Field(&f.Help, validation.By(DefaultFieldHelpValidationRule)),
@@ -241,7 +240,6 @@ func (f *PasswordField) getPasswordValue(record *Record) *PasswordFieldValue {
 
 // Intercept implements the [RecordInterceptor] interface.
 func (f *PasswordField) Intercept(
-	ctx context.Context,
 	app App,
 	record *Record,
 	actionName string,

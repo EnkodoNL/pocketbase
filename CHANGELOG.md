@@ -1,3 +1,12 @@
+## v0.43.0 (WIP)
+
+
+- Added `app.WithContext(ctx)` to normalize and unify custom context app methods handling
+    (@todo document breaking changes and landing page info)
+
+- Added new JSVM `new TimeoutContext(sec, [parentCtx?])` binding.
+
+
 ## v0.42.3
 
 - Increased the auto `VACUUM` deleted logs threshold to 50k to avoid unnecessery running too often.

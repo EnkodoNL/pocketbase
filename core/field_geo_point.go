@@ -1,8 +1,6 @@
 package core
 
 import (
-	"context"
-
 	validation "ganigeorgiev.com/pocketbase/ozzo-validation/v4"
 	"ganigeorgiev.com/pocketbase/pocketbase/core/validators"
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/types"
@@ -118,7 +116,7 @@ func (f *GeoPointField) PrepareValue(record *Record, raw any) (any, error) {
 }
 
 // ValidateValue implements [Field.ValidateValue] interface method.
-func (f *GeoPointField) ValidateValue(ctx context.Context, app App, record *Record) error {
+func (f *GeoPointField) ValidateValue(app App, record *Record) error {
 	val, ok := record.GetRaw(f.Name).(types.GeoPoint)
 	if !ok {
 		return validators.ErrUnsupportedValueType
@@ -144,8 +142,8 @@ func (f *GeoPointField) ValidateValue(ctx context.Context, app App, record *Reco
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
-func (f *GeoPointField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
-	return validation.ValidateStruct(f,
+func (f *GeoPointField) ValidateSettings(app App, collection *Collection) error {
+	return validation.ValidateStructWithContext(app.Context(), f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name, validation.By(DefaultFieldNameValidationRule)),
 		validation.Field(&f.Help, validation.By(DefaultFieldHelpValidationRule)),

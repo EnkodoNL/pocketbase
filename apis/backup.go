@@ -31,7 +31,7 @@ type backupFileInfo struct {
 }
 
 func backupsList(e *core.RequestEvent) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(e.App.Context(), 30*time.Second)
 	defer cancel()
 
 	fsys, err := e.App.NewBackupsFilesystem()
@@ -81,7 +81,7 @@ func backupDownload(e *core.RequestEvent) error {
 	}
 	defer fsys.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(e.App.Context(), 10*time.Minute)
 	defer cancel()
 
 	fsys.SetContext(ctx)
@@ -97,7 +97,7 @@ func backupDownload(e *core.RequestEvent) error {
 }
 
 func backupDelete(e *core.RequestEvent) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(e.App.Context(), 30*time.Second)
 	defer cancel()
 
 	fsys, err := e.App.NewBackupsFilesystem()
@@ -128,7 +128,7 @@ func backupRestore(e *core.RequestEvent) error {
 
 	key := e.Request.PathValue("key")
 
-	existsCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	existsCtx, cancel := context.WithTimeout(e.App.Context(), 30*time.Second)
 	defer cancel()
 
 	fsys, err := e.App.NewBackupsFilesystem()
@@ -151,7 +151,7 @@ func backupRestore(e *core.RequestEvent) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
-		if err := e.App.RestoreBackup(ctx, key); err != nil {
+		if err := e.App.WithContext(ctx).RestoreBackup(key); err != nil {
 			e.App.Logger().Error("Failed to restore backup", "key", key, "error", err.Error())
 		}
 	})

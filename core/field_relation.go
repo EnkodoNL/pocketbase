@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"database/sql/driver"
 
 	"ganigeorgiev.com/pocketbase/dbx"
@@ -195,7 +194,7 @@ func (f *RelationField) DriverValue(record *Record) (driver.Value, error) {
 }
 
 // ValidateValue implements [Field.ValidateValue] interface method.
-func (f *RelationField) ValidateValue(ctx context.Context, app App, record *Record) error {
+func (f *RelationField) ValidateValue(app App, record *Record) error {
 	ids := list.ToUniqueStringSlice(record.GetRaw(f.Name))
 	if len(ids) == 0 {
 		if f.Required {
@@ -237,8 +236,8 @@ func (f *RelationField) ValidateValue(ctx context.Context, app App, record *Reco
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
-func (f *RelationField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
-	return validation.ValidateStruct(f,
+func (f *RelationField) ValidateSettings(app App, collection *Collection) error {
+	return validation.ValidateStructWithContext(app.Context(), f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name, validation.By(DefaultFieldNameValidationRule)),
 		validation.Field(&f.Help, validation.By(DefaultFieldHelpValidationRule)),

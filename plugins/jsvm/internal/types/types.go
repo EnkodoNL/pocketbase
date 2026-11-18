@@ -381,6 +381,44 @@ declare class Context implements context.Context {
   constructor(parentCtx?: Context, key?: any, value?: any)
 }
 
+interface TimeoutContext extends context.Context{} // merge
+/**
+ * TimeoutContext creates a new cancellable timeout Go context.Context
+ * with a timeout duration specified in seconds.
+ *
+ * NB! Remember to manually call ctx.cancel() when done with the context call.
+ *
+ * Example:
+ *
+ * ` + "```" + `js
+ * // create a new timeout context that is auto cancelled after 5 seconds
+ * //
+ * // note that you can also pass a parent context as second argument like:
+ * // const ctx = new TimeoutContext(5, new Context(null, "someKey", 123))
+ * const ctx = new TimeoutContext(5)
+ *
+ * // associate it to a query
+ * try {
+ *   const record = $app.withContext(ctx).findRecordById("articles", "RECORD_ID")
+ * } catch (err) {
+ *   // error handling...
+ * } finally {
+ *   ctx.cancel()
+ * }
+ *
+ * ` + "```" + `
+ *
+ * @group PocketBase
+ */
+declare class TimeoutContext implements context.Context {
+  constructor(timeoutSec: number, parentCtx?: context.Context)
+
+  /**
+   * Manually cancels the context.
+   */
+  cancel(): void
+}
+
 /**
  * Record model class.
  *

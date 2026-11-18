@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -176,7 +175,7 @@ func (f *TextField) PrepareValue(record *Record, raw any) (any, error) {
 }
 
 // ValidateValue implements [Field.ValidateValue] interface method.
-func (f *TextField) ValidateValue(ctx context.Context, app App, record *Record) error {
+func (f *TextField) ValidateValue(app App, record *Record) error {
 	newVal, ok := record.GetRaw(f.Name).(string)
 	if !ok {
 		return validators.ErrUnsupportedValueType
@@ -280,8 +279,8 @@ func (f *TextField) ValidatePlainValue(value string) error {
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
-func (f *TextField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
-	return validation.ValidateStruct(f,
+func (f *TextField) ValidateSettings(app App, collection *Collection) error {
+	return validation.ValidateStructWithContext(app.Context(), f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name,
 			validation.By(DefaultFieldNameValidationRule),
@@ -347,7 +346,6 @@ func (f *TextField) checkAutogeneratePattern(value any) error {
 
 // Intercept implements the [RecordInterceptor] interface.
 func (f *TextField) Intercept(
-	ctx context.Context,
 	app App,
 	record *Record,
 	actionName string,

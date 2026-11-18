@@ -58,6 +58,105 @@ func TestNewBaseApp(t *testing.T) {
 	}
 }
 
+func TestBaseAppContext(t *testing.T) {
+	const testDataDir = "./pb_base_app_test_data_dir/"
+	defer os.RemoveAll(testDataDir)
+
+	app := core.NewBaseApp(core.BaseAppConfig{
+		DataDir: testDataDir,
+	})
+
+	ctx := app.Context()
+	if ctx == nil {
+		t.Fatal("Expected non-nil context")
+	}
+
+	v, _ := ctx.Value("pbBaseApp").(bool)
+	if v != true {
+		t.Fatalf("Expected context value pbBaseApp %v, got %v", true, v)
+	}
+}
+
+func TestBaseAppWithContext(t *testing.T) {
+	const testDataDir = "./pb_base_app_test_data_dir/"
+	defer os.RemoveAll(testDataDir)
+
+	app := core.NewBaseApp(core.BaseAppConfig{
+		DataDir: testDataDir,
+	})
+	defer app.ClearBootstrap()
+
+	if err := app.Bootstrap(); err != nil {
+		t.Fatal(err)
+	}
+
+	newCtx := context.WithValue(context.Background(), "test", true)
+
+	newApp := app.WithContext(newCtx)
+
+	if newApp.Context() == app.Context() {
+		t.Fatal("Expected the original and new app to have diffent context")
+	}
+
+	v, _ := newApp.Context().Value("test").(bool)
+	if v != true {
+		t.Fatalf("Expected context value test %v, got %v", true, v)
+	}
+
+	// all initialized db instance should share the same context
+	dbs := []dbx.Builder{
+		newApp.ConcurrentDB(),
+		newApp.NonconcurrentDB(),
+		newApp.AuxConcurrentDB(),
+		newApp.AuxNonconcurrentDB(),
+	}
+	for i, db := range dbs {
+		_, ok := db.(*dbx.DB)
+		if ok {
+			t.Fatalf("[db %d] Expected to get a wrapped db builder, got *dbx.DB", i)
+		}
+	}
+
+	if newApp.ConcurrentDB() == newApp.NonconcurrentDB() {
+		t.Fatalf("Expected data db builders to be different, got %v, %v", newApp.ConcurrentDB(), newApp.NonconcurrentDB())
+	}
+
+	if newApp.AuxConcurrentDB() == newApp.AuxNonconcurrentDB() {
+		t.Fatal("Expected auxiliary db builders to be different")
+	}
+
+	// ensure that in a transaction the wrapped builders will be the same
+	t.Run("transactional app", func(t *testing.T) {
+		newApp.RunInTransaction(func(txApp core.App) error {
+			newApp2 := txApp.WithContext(context.Background())
+
+			// all initialized db instance should share the same context
+			dbs := []dbx.Builder{
+				newApp2.ConcurrentDB(),
+				newApp2.NonconcurrentDB(),
+				newApp2.AuxConcurrentDB(),
+				newApp2.AuxNonconcurrentDB(),
+			}
+			for i, db := range dbs {
+				_, ok := db.(*dbx.Tx)
+				if ok {
+					t.Fatalf("[tx %d] Expected to get a wrapped db builder, got *dbx.Tx", i)
+				}
+			}
+
+			if newApp2.ConcurrentDB() != newApp2.NonconcurrentDB() {
+				t.Fatal("Expected tx data.db builders to be the same")
+			}
+
+			if newApp2.AuxConcurrentDB() == newApp2.AuxNonconcurrentDB() {
+				t.Fatal("Expected non-tx auxiliary.db builders to be different")
+			}
+
+			return nil
+		})
+	})
+}
+
 func TestBaseAppBootstrap(t *testing.T) {
 	const testDataDir = "./pb_base_app_test_data_dir/"
 	defer os.RemoveAll(testDataDir)

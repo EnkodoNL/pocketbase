@@ -102,7 +102,7 @@ func Register(app core.App, rootCmd *cobra.Command, config Config) error {
 	}
 
 	if p.config.Context == nil {
-		p.config.Context = context.Background()
+		p.config.Context = app.Context()
 	}
 
 	rootCmd.AddCommand(p.updateCmd())
@@ -246,7 +246,7 @@ func (p *plugin) update(withBackup bool) error {
 		color.Yellow("Creating pb_data backup...")
 
 		backupName := fmt.Sprintf("@update_%s.zip", latest.Tag)
-		if err := p.app.CreateBackup(p.config.Context, backupName); err != nil {
+		if err := p.app.WithContext(p.config.Context).CreateBackup(backupName); err != nil {
 			tryToRevertExecChanges()
 			return err
 		}

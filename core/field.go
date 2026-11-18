@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"database/sql/driver"
 	"regexp"
 	"strings"
@@ -106,10 +105,10 @@ type Field interface {
 	PrepareValue(record *Record, raw any) (any, error)
 
 	// ValidateSettings validates the current field value associated with the provided record.
-	ValidateValue(ctx context.Context, app App, record *Record) error
+	ValidateValue(app App, record *Record) error
 
 	// ValidateSettings validates the current field settings.
-	ValidateSettings(ctx context.Context, app App, collection *Collection) error
+	ValidateSettings(app App, collection *Collection) error
 }
 
 // MaxBodySizeCalculator defines an optional field interface for
@@ -176,7 +175,6 @@ type RecordInterceptor interface {
 	// Note that users must call actionFunc() manually if they want to
 	// execute the specific record action.
 	Intercept(
-		ctx context.Context,
 		app App,
 		record *Record,
 		actionName string,

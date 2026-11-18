@@ -1,7 +1,6 @@
 package core_test
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -113,7 +112,7 @@ func TestAutodateFieldValidateValue(t *testing.T) {
 
 	for _, s := range scenarios {
 		t.Run(s.name, func(t *testing.T) {
-			err := s.field.ValidateValue(context.Background(), app, s.record())
+			err := s.field.ValidateValue(app, s.record())
 
 			hasErr := err != nil
 			if hasErr != s.expectError {
@@ -186,7 +185,7 @@ func TestAutodateFieldValidateSettings(t *testing.T) {
 
 	for _, s := range scenarios {
 		t.Run(s.name, func(t *testing.T) {
-			errs := s.field().ValidateSettings(context.Background(), app, superusers)
+			errs := s.field().ValidateSettings(app, superusers)
 
 			tests.TestValidationErrors(t, errs, s.expectErrors)
 		})
@@ -328,7 +327,7 @@ func TestAutodateFieldIntercept(t *testing.T) {
 			record := s.record()
 
 			now := types.NowDateTime().String()
-			err := s.field.Intercept(context.Background(), app, record, s.actionName, func() error {
+			err := s.field.Intercept(app, record, s.actionName, func() error {
 				actionCalls++
 				return nil
 			})

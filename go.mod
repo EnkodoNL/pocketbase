@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	ganigeorgiev.com/fexpr v0.7.0
-	ganigeorgiev.com/pocketbase/dbx v1.13.0
+	ganigeorgiev.com/pocketbase/dbx v1.14.0
 	ganigeorgiev.com/pocketbase/ozzo-validation/v4 v4.4.1
 	ganigeorgiev.com/pocketbase/tygoja v0.2.0
 	github.com/disintegration/imaging v1.6.2

@@ -1,8 +1,6 @@
 package core
 
 import (
-	"context"
-
 	validation "ganigeorgiev.com/pocketbase/ozzo-validation/v4"
 	"ganigeorgiev.com/pocketbase/pocketbase/core/validators"
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/types"
@@ -116,12 +114,12 @@ func (f *AutodateField) PrepareValue(record *Record, raw any) (any, error) {
 }
 
 // ValidateValue implements [Field.ValidateValue] interface method.
-func (f *AutodateField) ValidateValue(ctx context.Context, app App, record *Record) error {
+func (f *AutodateField) ValidateValue(app App, record *Record) error {
 	return nil
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
-func (f *AutodateField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
+func (f *AutodateField) ValidateSettings(app App, collection *Collection) error {
 	oldOnCreate := f.OnCreate
 	oldOnUpdate := f.OnUpdate
 
@@ -134,7 +132,7 @@ func (f *AutodateField) ValidateSettings(ctx context.Context, app App, collectio
 		}
 	}
 
-	return validation.ValidateStruct(f,
+	return validation.ValidateStructWithContext(app.Context(), f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name, validation.By(DefaultFieldNameValidationRule)),
 		validation.Field(
@@ -163,7 +161,6 @@ func (f *AutodateField) FindSetter(key string) SetterFunc {
 
 // Intercept implements the [RecordInterceptor] interface.
 func (f *AutodateField) Intercept(
-	ctx context.Context,
 	app App,
 	record *Record,
 	actionName string,

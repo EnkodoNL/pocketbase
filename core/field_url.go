@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"net/url"
 	"slices"
 
@@ -119,7 +118,7 @@ func (f *URLField) PrepareValue(record *Record, raw any) (any, error) {
 }
 
 // ValidateValue implements [Field.ValidateValue] interface method.
-func (f *URLField) ValidateValue(ctx context.Context, app App, record *Record) error {
+func (f *URLField) ValidateValue(app App, record *Record) error {
 	val, ok := record.GetRaw(f.Name).(string)
 	if !ok {
 		return validators.ErrUnsupportedValueType
@@ -156,8 +155,8 @@ func (f *URLField) ValidateValue(ctx context.Context, app App, record *Record) e
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
-func (f *URLField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
-	return validation.ValidateStruct(f,
+func (f *URLField) ValidateSettings(app App, collection *Collection) error {
+	return validation.ValidateStructWithContext(app.Context(), f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name, validation.By(DefaultFieldNameValidationRule)),
 		validation.Field(&f.Help, validation.By(DefaultFieldHelpValidationRule)),

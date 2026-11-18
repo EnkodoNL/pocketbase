@@ -1,7 +1,6 @@
 package core_test
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -169,7 +168,7 @@ func TestURLFieldValidateValue(t *testing.T) {
 
 	for _, s := range scenarios {
 		t.Run(s.name, func(t *testing.T) {
-			err := s.field.ValidateValue(context.Background(), app, s.record())
+			err := s.field.ValidateValue(app, s.record())
 
 			hasErr := err != nil
 			if hasErr != s.expectError {
@@ -264,7 +263,7 @@ func TestURLFieldValidateSettings(t *testing.T) {
 
 	for _, s := range scenarios {
 		t.Run(s.name, func(t *testing.T) {
-			errs := s.field().ValidateSettings(context.Background(), app, collection)
+			errs := s.field().ValidateSettings(app, collection)
 
 			tests.TestValidationErrors(t, errs, s.expectErrors)
 		})

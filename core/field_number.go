@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"math"
 
 	validation "ganigeorgiev.com/pocketbase/ozzo-validation/v4"
@@ -136,7 +135,7 @@ func (f *NumberField) PrepareValue(record *Record, raw any) (any, error) {
 }
 
 // ValidateValue implements [Field.ValidateValue] interface method.
-func (f *NumberField) ValidateValue(ctx context.Context, app App, record *Record) error {
+func (f *NumberField) ValidateValue(app App, record *Record) error {
 	val, ok := record.GetRaw(f.Name).(float64)
 	if !ok {
 		return validators.ErrUnsupportedValueType
@@ -171,7 +170,7 @@ func (f *NumberField) ValidateValue(ctx context.Context, app App, record *Record
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
-func (f *NumberField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
+func (f *NumberField) ValidateSettings(app App, collection *Collection) error {
 	maxRules := []validation.Rule{
 		validation.By(f.checkOnlyInt),
 	}
@@ -186,7 +185,7 @@ func (f *NumberField) ValidateSettings(ctx context.Context, app App, collection 
 		}))
 	}
 
-	return validation.ValidateStruct(f,
+	return validation.ValidateStructWithContext(app.Context(), f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name, validation.By(DefaultFieldNameValidationRule)),
 		validation.Field(&f.Help, validation.By(DefaultFieldHelpValidationRule)),

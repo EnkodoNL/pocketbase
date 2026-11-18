@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -27,12 +26,7 @@ func onCollectionValidate(e *CollectionEvent) error {
 		}
 	}
 
-	validator := newCollectionValidator(
-		e.Context,
-		e.App,
-		e.Collection,
-		original,
-	)
+	validator := newCollectionValidator(e.App, e.Collection, original)
 
 	if err := validator.run(); err != nil {
 		return err
@@ -41,9 +35,8 @@ func onCollectionValidate(e *CollectionEvent) error {
 	return e.Next()
 }
 
-func newCollectionValidator(ctx context.Context, app App, new, original *Collection) *collectionValidator {
+func newCollectionValidator(app App, new, original *Collection) *collectionValidator {
 	validator := &collectionValidator{
-		ctx:      ctx,
 		app:      app,
 		new:      new,
 		original: original,
@@ -61,7 +54,6 @@ type collectionValidator struct {
 	original *Collection
 	new      *Collection
 	app      App
-	ctx      context.Context
 }
 
 type optionsValidator interface {
@@ -79,7 +71,7 @@ func (validator *collectionValidator) run() error {
 	}
 
 	// validate base fields
-	baseErr := validation.ValidateStruct(validator.new,
+	baseErr := validation.ValidateStructWithContext(validator.app.Context(), validator.new,
 		validation.Field(
 			&validator.new.Id,
 			validation.Required,
@@ -296,7 +288,7 @@ func (validator *collectionValidator) checkFieldValidators(value any) error {
 	errs := validation.Errors{}
 
 	for i, field := range fields {
-		if err := field.ValidateSettings(validator.ctx, validator.app, validator.new); err != nil {
+		if err := field.ValidateSettings(validator.app, validator.new); err != nil {
 			errs[strconv.Itoa(i)] = err
 		}
 	}

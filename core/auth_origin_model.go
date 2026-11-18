@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"slices"
 
@@ -50,7 +49,7 @@ func NewAuthOrigin(app App) *AuthOrigin {
 
 // PreValidate implements the [PreValidator] interface and checks
 // whether the proxy is properly loaded.
-func (m *AuthOrigin) PreValidate(ctx context.Context, app App) error {
+func (m *AuthOrigin) PreValidate(app App) error {
 	if m.Record == nil || m.Record.Collection().Name != CollectionNameAuthOrigins {
 		return errors.New("missing or invalid AuthOrigin ProxyRecord")
 	}

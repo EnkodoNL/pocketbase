@@ -1,7 +1,6 @@
 package apis_test
 
 import (
-	"context"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -557,7 +556,6 @@ func TestRealtimeAuthRecordDeleteEvent(t *testing.T) {
 	e := new(core.ModelEvent)
 	e.App = testApp
 	e.Type = core.ModelEventTypeDelete
-	e.Context = context.Background()
 	e.Model = authRecord1
 
 	err = testApp.OnModelAfterDeleteSuccess().Trigger(e)
@@ -906,7 +904,6 @@ func TestRealtimeAuthRecordUnsetOnCollectionDelete(t *testing.T) {
 	e := new(core.ModelEvent)
 	e.App = testApp
 	e.Type = core.ModelEventTypeDelete
-	e.Context = context.Background()
 	e.Model = usersCollection
 
 	err = testApp.OnModelAfterDeleteSuccess().Trigger(e)

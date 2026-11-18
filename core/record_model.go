@@ -2,7 +2,6 @@ package core
 
 import (
 	"bytes"
-	"context"
 	"database/sql"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -295,7 +294,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionValidate,
 				func() error {
@@ -310,7 +308,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionCreate,
 				e.Next,
@@ -323,7 +320,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionCreateExecute,
 				func() error {
@@ -338,7 +334,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionAfterCreate,
 				e.Next,
@@ -351,7 +346,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordErrorEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionAfterCreateError,
 				e.Next,
@@ -364,7 +358,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionUpdate,
 				e.Next,
@@ -377,7 +370,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionUpdateExecute,
 				func() error {
@@ -392,7 +384,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionAfterUpdate,
 				e.Next,
@@ -405,7 +396,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordErrorEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionAfterUpdateError,
 				e.Next,
@@ -418,7 +408,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionDelete,
 				func() error {
@@ -437,7 +426,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionDeleteExecute,
 				func() error {
@@ -452,7 +440,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionAfterDelete,
 				e.Next,
@@ -465,7 +452,6 @@ func (app *BaseApp) registerRecordHooks() {
 		Id: systemHookIdRecord,
 		Func: func(e *RecordErrorEvent) error {
 			return e.Record.callFieldInterceptors(
-				e.Context,
 				e.App,
 				InterceptorActionAfterDeleteError,
 				e.Next,
@@ -1406,7 +1392,6 @@ func (m *Record) ReplaceModifiers(data map[string]any) map[string]any {
 // -------------------------------------------------------------------
 
 func (m *Record) callFieldInterceptors(
-	ctx context.Context,
 	app App,
 	actionName string,
 	actionFunc func() error,
@@ -1416,7 +1401,7 @@ func (m *Record) callFieldInterceptors(
 		if f, ok := field.(RecordInterceptor); ok {
 			oldfn := actionFunc
 			actionFunc = func() error {
-				return f.Intercept(ctx, app, m, actionName, oldfn)
+				return f.Intercept(app, m, actionName, oldfn)
 			}
 		}
 	}
@@ -1428,7 +1413,7 @@ func onRecordValidate(e *RecordEvent) error {
 	errs := validation.Errors{}
 
 	for _, f := range e.Record.Collection().Fields {
-		if err := f.ValidateValue(e.Context, e.App, e.Record); err != nil {
+		if err := f.ValidateValue(e.App, e.Record); err != nil {
 			errs[f.GetName()] = err
 		}
 	}

@@ -1,7 +1,6 @@
 package core_test
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -70,32 +69,6 @@ func TestValidate(t *testing.T) {
 	})
 
 	err := app.Validate(u)
-	if err != testErr {
-		t.Fatalf("Expected error %v, got %v", testErr, err)
-	}
-}
-
-func TestValidateWithContext(t *testing.T) {
-	t.Parallel()
-
-	app, _ := tests.NewTestApp()
-	defer app.Cleanup()
-
-	u := &mockSuperusers{}
-
-	testErr := errors.New("test")
-
-	app.OnModelValidate().BindFunc(func(e *core.ModelEvent) error {
-		if v := e.Context.Value("test"); v != 123 {
-			t.Fatalf("Expected 'test' context value %#v, got %#v", 123, v)
-		}
-		return testErr
-	})
-
-	//nolint:staticcheck
-	ctx := context.WithValue(context.Background(), "test", 123)
-
-	err := app.ValidateWithContext(ctx, u)
 	if err != testErr {
 		t.Fatalf("Expected error %v, got %v", testErr, err)
 	}

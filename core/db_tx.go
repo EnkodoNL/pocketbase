@@ -23,13 +23,13 @@ func (app *BaseApp) AuxRunInTransaction(fn func(txApp App) error) error {
 }
 
 func (app *BaseApp) runInTransaction(db dbx.Builder, fn func(txApp App) error, isForAuxDB bool) error {
-	switch txOrDB := db.(type) {
+	switch txOrDB := db.Unwrap().(type) {
 	case *dbx.Tx:
 		// run as part of the already existing transaction
 		return fn(app)
 	case *dbx.DB:
 		var txApp *BaseApp
-		txErr := txOrDB.Transactional(func(tx *dbx.Tx) error {
+		txErr := txOrDB.TransactionalContext(app.Context(), nil, func(tx *dbx.Tx) error {
 			txApp = app.createTxApp(tx, isForAuxDB)
 			return fn(txApp)
 		})
@@ -53,11 +53,11 @@ func (app *BaseApp) createTxApp(tx *dbx.Tx, isForAuxDB bool) *BaseApp {
 	clone := *app
 
 	if isForAuxDB {
-		clone.auxConcurrentDB = tx
-		clone.auxNonconcurrentDB = tx
+		clone.auxConcurrentDB = &contextDBBuilder{tx, app.Context()}
+		clone.auxNonconcurrentDB = clone.auxConcurrentDB
 	} else {
-		clone.concurrentDB = tx
-		clone.nonconcurrentDB = tx
+		clone.concurrentDB = &contextDBBuilder{tx, app.Context()}
+		clone.nonconcurrentDB = clone.concurrentDB
 	}
 
 	clone.txInfo = &TxAppInfo{

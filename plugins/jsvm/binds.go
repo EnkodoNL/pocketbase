@@ -430,6 +430,30 @@ func BindCore(vm *goja.Runtime) {
 		return instanceValue
 	})
 
+	vm.Set("TimeoutContext", func(call goja.ConstructorCall) *goja.Object {
+		instance := &struct {
+			context.Context
+			Cancel func()
+		}{}
+
+		timeoutSec, ok := call.Argument(0).Export().(int64)
+		if !ok {
+			panic("ContextWithTimeout first argument must be a valid duration number in seconds")
+		}
+
+		baseCtx, ok := call.Argument(1).Export().(context.Context)
+		if !ok {
+			baseCtx = context.Background()
+		}
+
+		instance.Context, instance.Cancel = context.WithTimeout(baseCtx, time.Duration(timeoutSec)*time.Second)
+
+		instanceValue := vm.ToValue(instance).(*goja.Object)
+		instanceValue.SetPrototype(call.This.Prototype())
+
+		return instanceValue
+	})
+
 	vm.Set("DynamicModel", func(call goja.ConstructorCall) *goja.Object {
 		shape, ok := call.Argument(0).Export().(map[string]any)
 		if !ok || len(shape) == 0 {

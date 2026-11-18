@@ -1,8 +1,10 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 )
 
@@ -63,4 +65,68 @@ func TestBaseLockRetry(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestModelQueryDefaultTimeout(t *testing.T) {
+	t.Parallel()
+
+	const testDataDir = "./pb_base_app_test_data_dir/"
+	defer os.RemoveAll(testDataDir)
+
+	app := NewBaseApp(BaseAppConfig{
+		DataDir: testDataDir,
+	})
+	defer app.ClearBootstrap()
+
+	if err := app.Bootstrap(); err != nil {
+		t.Fatal(err)
+	}
+
+	demo1, err := app.FindCollectionByNameOrId(CollectionNameSuperusers)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("non-expired config timeout with default app context", func(t *testing.T) {
+		var records []*Record
+		err = app.RecordQuery(demo1).All(&records)
+		if err != nil {
+			t.Fatal("Expected the query to succeed")
+		}
+	})
+
+	t.Run("non-expired config timeout with invalid custom app context", func(t *testing.T) {
+		cancelledCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		var records []*Record
+		err = app.WithContext(cancelledCtx).RecordQuery(demo1).All(&records)
+		if err == nil {
+			t.Fatal("Expected the query to fail")
+		}
+	})
+
+	t.Run("expired config timeout with default app context", func(t *testing.T) {
+		oldQueryTimeout := app.config.QueryTimeout
+		app.config.QueryTimeout = 0
+		defer func() { app.config.QueryTimeout = oldQueryTimeout }()
+
+		var records []*Record
+		err = app.RecordQuery(demo1).All(&records)
+		if err == nil {
+			t.Fatal("Expected the query to fail")
+		}
+	})
+
+	t.Run("expired config timeout with valid custom app context", func(t *testing.T) {
+		oldQueryTimeout := app.config.QueryTimeout
+		app.config.QueryTimeout = 0
+		defer func() { app.config.QueryTimeout = oldQueryTimeout }()
+
+		var records []*Record
+		err = app.WithContext(context.Background()).RecordQuery(demo1).All(&records)
+		if err != nil {
+			t.Fatal("Expected the query to succeed")
+		}
+	})
 }

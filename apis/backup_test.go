@@ -3,7 +3,6 @@ package apis_test
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -832,21 +831,19 @@ func TestBackupsRestore(t *testing.T) {
 // -------------------------------------------------------------------
 
 func createTestBackups(app core.App) error {
-	ctx := context.Background()
-
-	if err := app.CreateBackup(ctx, "test1.zip"); err != nil {
+	if err := app.CreateBackup("test1.zip"); err != nil {
 		return err
 	}
 
-	if err := app.CreateBackup(ctx, "test2.zip"); err != nil {
+	if err := app.CreateBackup("test2.zip"); err != nil {
 		return err
 	}
 
-	if err := app.CreateBackup(ctx, "test3.zip"); err != nil {
+	if err := app.CreateBackup("test3.zip"); err != nil {
 		return err
 	}
 
-	if err := app.CreateBackup(ctx, "@test4.zip"); err != nil {
+	if err := app.CreateBackup("@test4.zip"); err != nil {
 		return err
 	}
 

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"database/sql/driver"
 	"slices"
 
@@ -182,7 +181,7 @@ func (f *SelectField) DriverValue(record *Record) (driver.Value, error) {
 }
 
 // ValidateValue implements [Field.ValidateValue] interface method.
-func (f *SelectField) ValidateValue(ctx context.Context, app App, record *Record) error {
+func (f *SelectField) ValidateValue(app App, record *Record) error {
 	normalizedVal := list.ToUniqueStringSlice(record.GetRaw(f.Name))
 	if len(normalizedVal) == 0 {
 		if f.Required {
@@ -211,13 +210,13 @@ func (f *SelectField) ValidateValue(ctx context.Context, app App, record *Record
 }
 
 // ValidateSettings implements [Field.ValidateSettings] interface method.
-func (f *SelectField) ValidateSettings(ctx context.Context, app App, collection *Collection) error {
+func (f *SelectField) ValidateSettings(app App, collection *Collection) error {
 	max := len(f.Values)
 	if max == 0 {
 		max = 1
 	}
 
-	return validation.ValidateStruct(f,
+	return validation.ValidateStructWithContext(app.Context(), f,
 		validation.Field(&f.Id, validation.By(DefaultFieldIdValidationRule)),
 		validation.Field(&f.Name, validation.By(DefaultFieldNameValidationRule)),
 		validation.Field(&f.Help, validation.By(DefaultFieldHelpValidationRule)),

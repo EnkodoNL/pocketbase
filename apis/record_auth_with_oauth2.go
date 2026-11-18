@@ -298,7 +298,7 @@ func oauth2Submit(e *core.RecordAuthWithOAuth2RequestEvent, optExternalAuth *cor
 				if mappedField != nil && mappedField.Type() == core.FieldTypeFile {
 					// download the avatar if the mapped field is a file
 					avatarFile, err := func() (*filesystem.File, error) {
-						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+						ctx, cancel := context.WithTimeout(e.App.Context(), 10*time.Second)
 						defer cancel()
 
 						// the extra checks are not required because the OAuth2 APIs are trusted vendor

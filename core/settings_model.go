@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -279,11 +278,11 @@ func (s *Settings) DBExport(app App) (map[string]any, error) {
 
 // PostValidate implements the [PostValidator] interface and defines
 // the Settings model validations.
-func (s *Settings) PostValidate(ctx context.Context, app App) error {
+func (s *Settings) PostValidate(app App) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return validation.ValidateStructWithContext(ctx, s,
+	return validation.ValidateStructWithContext(app.Context(), s,
 		validation.Field(&s.SuperuserIPs, validation.Each(validation.Required, validation.By(validators.IPOrSubnet))),
 		validation.Field(&s.Meta),
 		validation.Field(&s.Logs),

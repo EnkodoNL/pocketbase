@@ -16,13 +16,18 @@ type dualDBBuilder struct {
 	nonconcurrentDB dbx.Builder
 }
 
+// Select implements the [dbx.Builder.Unwrap] interface method.
+func (b *dualDBBuilder) Unwrap() dbx.Builder {
+	return b.concurrentDB.Unwrap()
+}
+
 // Select implements the [dbx.Builder.Select] interface method.
 func (b *dualDBBuilder) Select(cols ...string) *dbx.SelectQuery {
 	return b.concurrentDB.Select(cols...)
 }
 
 // Model implements the [dbx.Builder.Model] interface method.
-func (b *dualDBBuilder) Model(data interface{}) *dbx.ModelQuery {
+func (b *dualDBBuilder) Model(data any) *dbx.ModelQuery {
 	return b.nonconcurrentDB.Model(data)
 }
 

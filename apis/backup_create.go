@@ -1,7 +1,6 @@
 package apis
 
 import (
-	"context"
 	"net/http"
 	"regexp"
 
@@ -27,7 +26,7 @@ func backupCreate(e *core.RequestEvent) error {
 		return e.BadRequestError("An error occurred while validating the submitted data.", err)
 	}
 
-	err = e.App.CreateBackup(context.Background(), form.Name)
+	err = e.App.CreateBackup(form.Name)
 	if err != nil {
 		return e.BadRequestError("Failed to create backup.", err)
 	}

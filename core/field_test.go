@@ -1,7 +1,6 @@
 package core_test
 
 import (
-	"context"
 	"encoding/json/v2"
 	"reflect"
 	"strings"
@@ -111,7 +110,7 @@ func testDefaultFieldIdValidation(t *testing.T, fieldType string) {
 
 	for _, s := range scenarios {
 		t.Run("[id] "+s.name, func(t *testing.T) {
-			errs, _ := s.field().ValidateSettings(context.Background(), app, collection).(validation.Errors)
+			errs, _ := s.field().ValidateSettings(app, collection).(validation.Errors)
 
 			hasErr := errs["id"] != nil
 			if hasErr != s.expectError {
@@ -252,7 +251,7 @@ func testDefaultFieldNameValidation(t *testing.T, fieldType string) {
 
 	for _, s := range scenarios {
 		t.Run("[name] "+s.name, func(t *testing.T) {
-			errs, _ := s.field().ValidateSettings(context.Background(), app, collection).(validation.Errors)
+			errs, _ := s.field().ValidateSettings(app, collection).(validation.Errors)
 
 			hasErr := errs["name"] != nil
 			if hasErr != s.expectError {
@@ -309,7 +308,7 @@ func testDefaultFieldHelpValidation[T any](t *testing.T) {
 				t.Fatal(err)
 			}
 
-			errs, _ := field.ValidateSettings(context.Background(), app, collection).(validation.Errors)
+			errs, _ := field.ValidateSettings(app, collection).(validation.Errors)
 
 			hasErr := errs["help"] != nil
 			if hasErr != s.expectError {

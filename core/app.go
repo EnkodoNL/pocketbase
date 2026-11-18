@@ -29,9 +29,35 @@ type App interface {
 	// UnsafeWithoutHooks returns a shallow copy of the current app WITHOUT any registered hooks.
 	//
 	// NB! Note that using the returned app instance may cause data integrity errors
-	// since the Record validations and data normalizations (including files uploads)
+	// since the Record validations and data normalization (including files uploads)
 	// rely on the app hooks to work.
 	UnsafeWithoutHooks() App
+
+	// WithContext creates a new shallow copy of the current app with its context set to the given one.
+	//
+	// WithContext is often used to customize the default timeouts and/or group the
+	// execution duration of DB queries, transactions and any other app related operation.
+	//
+	// Keep in mind that this context will be used by all queries executed by the new app
+	// instance meaning that technically you can provide a context.Background() for no limits.
+	// Be careful with that!
+	//
+	// For example:
+	//
+	//	ctx, cancel := context.WithTimeout(app.Context(), 5*time.Second)
+	//	defer cancel()
+	//
+	//	ctxApp := app.WithContext(ctx)
+	//
+	//	// run your queries using the newly created ctxApp
+	//	// (in the below example both the Find and Save operations share the same context)
+	//	record, err := ctxApp.FindRecordById("example", "123")
+	//	record.Set("name", "abc")
+	//	err = ctxApp.Save(record)
+	WithContext(ctx context.Context) App
+
+	// Context returns the context associated with the current app instance.
+	Context() context.Context
 
 	// Logger returns the default app logger.
 	//
@@ -118,7 +144,7 @@ type App interface {
 	//
 	// Please refer to the godoc of the specific core.App implementation
 	// for details on the backup procedures.
-	CreateBackup(ctx context.Context, name string) error
+	CreateBackup(name string) error
 
 	// RestoreBackup restores the backup with the specified name and restarts
 	// the current running application process.
@@ -130,7 +156,7 @@ type App interface {
 	// for details on the restore procedures.
 	//
 	// NB! This feature is experimental and currently is expected to work only on UNIX based systems.
-	RestoreBackup(ctx context.Context, name string) error
+	RestoreBackup(name string) error
 
 	// Restart restarts (aka. replaces) the current running application process.
 	//
@@ -303,64 +329,31 @@ type App interface {
 	// Delete deletes the specified model from the regular app database.
 	Delete(model Model) error
 
-	// Delete deletes the specified model from the regular app database
-	// (the context could be used to limit the query execution).
-	DeleteWithContext(ctx context.Context, model Model) error
-
 	// AuxDelete deletes the specified model from the auxiliary database.
 	AuxDelete(model Model) error
-
-	// AuxDeleteWithContext deletes the specified model from the auxiliary database
-	// (the context could be used to limit the query execution).
-	AuxDeleteWithContext(ctx context.Context, model Model) error
 
 	// Save validates and saves the specified model into the regular app database.
 	//
 	// If you don't want to run validations, use [App.SaveNoValidate()].
 	Save(model Model) error
 
-	// SaveWithContext is the same as [App.Save()] but allows specifying a context to limit the db execution.
-	//
-	// If you don't want to run validations, use [App.SaveNoValidateWithContext()].
-	SaveWithContext(ctx context.Context, model Model) error
-
 	// SaveNoValidate saves the specified model into the regular app database without performing validations.
 	//
 	// If you want to also run validations before persisting, use [App.Save()].
 	SaveNoValidate(model Model) error
-
-	// SaveNoValidateWithContext is the same as [App.SaveNoValidate()]
-	// but allows specifying a context to limit the db execution.
-	//
-	// If you want to also run validations before persisting, use [App.SaveWithContext()].
-	SaveNoValidateWithContext(ctx context.Context, model Model) error
 
 	// AuxSave validates and saves the specified model into the auxiliary app database.
 	//
 	// If you don't want to run validations, use [App.AuxSaveNoValidate()].
 	AuxSave(model Model) error
 
-	// AuxSaveWithContext is the same as [App.AuxSave()] but allows specifying a context to limit the db execution.
-	//
-	// If you don't want to run validations, use [App.AuxSaveNoValidateWithContext()].
-	AuxSaveWithContext(ctx context.Context, model Model) error
-
 	// AuxSaveNoValidate saves the specified model into the auxiliary app database without performing validations.
 	//
 	// If you want to also run validations before persisting, use [App.AuxSave()].
 	AuxSaveNoValidate(model Model) error
 
-	// AuxSaveNoValidateWithContext is the same as [App.AuxSaveNoValidate()]
-	// but allows specifying a context to limit the db execution.
-	//
-	// If you want to also run validations before persisting, use [App.AuxSaveWithContext()].
-	AuxSaveNoValidateWithContext(ctx context.Context, model Model) error
-
 	// Validate triggers the OnModelValidate hook for the specified model.
 	Validate(model Model) error
-
-	// ValidateWithContext is the same as Validate but allows specifying the ModelEvent context.
-	ValidateWithContext(ctx context.Context, model Model) error
 
 	// RunInTransaction wraps fn into a transaction for the regular app database.
 	//

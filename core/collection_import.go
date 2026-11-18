@@ -2,7 +2,6 @@ package core
 
 import (
 	"cmp"
-	"context"
 	"database/sql"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -180,7 +179,6 @@ func (app *BaseApp) ImportCollections(toImport []map[string]any, deleteMissing b
 			}
 
 			validator := newCollectionValidator(
-				context.Background(),
 				txApp,
 				imported,
 				original,

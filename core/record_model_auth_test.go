@@ -1,7 +1,6 @@
 package core_test
 
 import (
-	"context"
 	"testing"
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
@@ -154,7 +153,7 @@ func TestRecordSetRandomPassword(t *testing.T) {
 	f.Max = 2
 	f.Pattern = `\d+`
 
-	if err := f.ValidateValue(context.Background(), app, record); err != nil {
+	if err := f.ValidateValue(app, record); err != nil {
 		t.Fatalf("Expected password field plain value validators to be ignored, got %v", err)
 	}
 }
