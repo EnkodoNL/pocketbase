@@ -1,10 +1,41 @@
 ## v0.43.0 (WIP)
 
+- Added new `app.Context()` and `app.WithContext(ctx)` methods to normalize how `context.Context` is passed to the `core.App` related methods ([#8374](https://ganigeorgiev.com/pocketbase/discussions/8374)).
+    ⚠️ To avoid duplication and ambiguity, the following minor breaking changes were introduced:
+    ```
+    // removed core.App methods
+    app.DeleteWithContext(ctx, m)            -> app.WithContext(ctx).Delete(m)
+    app.AuxDeleteWithContext(ctx, m)         -> app.WithContext(ctx).AuxDelete(m)
+    app.SaveWithContext(ctx, m)              -> app.WithContext(ctx).Save(m)
+    app.SaveNoValidateWithContext(ctx, m)    -> app.WithContext(ctx).SaveNoValidate(m)
+    app.AuxSaveWithContext(ctx, m)           -> app.WithContext(ctx).AuxSave(m)
+    app.AuxSaveNoValidateWithContext(ctx, m) -> app.WithContext(ctx).AuxSaveNoValidate(m)
+    app.ValidateWithContext(ctx, m)          -> app.WithContext(ctx).Validate(m)
+    app.CreateBackup(ctx, name)              -> app.WithContext(ctx).CreateBackup(name)
+    app.RestoreBackup(ctx, name)             -> app.WithContext(ctx).RestoreBackup(name)
 
-- Added `app.WithContext(ctx)` to normalize and unify custom context app methods handling
-    (@todo document breaking changes and landing page info)
+    // removed hook events Context field
+    core.ModelEvent.Context      -> removed in favour of core.ModelEvent.App.Context()
+    core.RecordEvent.Context     -> removed in favour of core.RecordEvent.App.Context()
+    core.CollectionEvent.Context -> removed in favour of core.CollectionEvent.App.Context()
+    core.BackupEvent.Context     -> removed in favour of core.BackupEvent.App.Context()
 
-- Added new JSVM `new TimeoutContext(sec, [parentCtx?])` binding.
+    // miscellaneous
+    forms.RecordUpsert.SetContext(ctx)                -> removed and uses the app context
+    core.PreValidator.PreValidate(ctx, app)           -> core.PreValidator.PreValidate(app)
+    core.PostValidator.PostValidate(ctx, app)         -> core.PostValidator.PostValidate(app)
+    core.Field.ValidateValue(ctx, app, record)        -> core.Field.ValidateValue(app, record)
+    core.Field.ValidateSettings(ctx, app, collection) -> core.Field.ValidateSettings(app, collection)
+    core.RecordInterceptor.Intercept(ctx, app, ...)   -> core.RecordInterceptor.Intercept(app, ...)
+
+    // (very unlikely) because when a custom app context is set we wrap the DB builders,
+    // if you have somewhere in your Go code that do direct type assertions against
+    // the dbx.Builder interface you can use the new Unwrap() method to ensure that
+    // it always resolves to the underlying *dbx.DB/*dbx.Tx value:
+    app.ConcurrentDB().(*dbx.DB) -> app.ConcurrentDB().Unwrap().(*dbx.DB)
+    ```
+
+- Added `new TimeoutContext(sec, [parentCtx?])` JSVM binding so that it can be used with `$app.withContext(ctx)`.
 
 
 ## v0.42.3
