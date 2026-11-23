@@ -558,7 +558,7 @@ func (app *BaseApp) ClearBootstrap() error {
 			if db == nil {
 				continue
 			}
-			if v, ok := (*db).(closer); ok {
+			if v, ok := (*db).Unwrap().(closer); ok {
 				if err := v.Close(); err != nil {
 					errs = append(errs, err)
 				}
