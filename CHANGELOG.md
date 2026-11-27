@@ -37,6 +37,9 @@
 
 - Added `new TimeoutContext(sec, [parentCtx?])` JSVM binding so that it can be used with `$app.withContext(ctx)`.
 
+- Refactored the "All-in-one" redirect processing to more gracefully handle client IP address changes during OAuth2 auth.
+    _This is related to [#7758](https://ganigeorgiev.com/pocketbase/discussions/7758) and now instead of throwing an error, in case of a difference between the IP that started the OAuth2 auth and the IP that finalized it, we now show a confirmation page to ask the user if they want to proceed or cancel the authentication entirely._
+
 
 ## v0.42.3
 

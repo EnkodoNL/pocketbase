@@ -6,8 +6,7 @@ This is the PocketBase Superuser dashboard UI (built with Shablon and Vite).
 Although it could be used independently, it is intended to be embedded and extended
 as part of the PocketBase app executable (hence the `dist` directory and `embed.go` file).
 
-> [!WARNING]
-> The UI kit and extension APIs remains deliberately undocumented for the time being until a stable PocketBase release is published ([#7612](https://ganigeorgiev.com/pocketbase/discussions/7612)).
+> ⚠️ The UI kit and extension APIs remains deliberately undocumented for the time being until a stable PocketBase release is published ([#7612](https://ganigeorgiev.com/pocketbase/discussions/7612)).
 
 ## Development
 

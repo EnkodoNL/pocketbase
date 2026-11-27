@@ -2,8 +2,11 @@ package apis_test
 
 import (
 	"context"
+	"encoding/json/v2"
+	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -12,14 +15,15 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"ganigeorgiev.com/pocketbase/pocketbase/tests"
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/subscriptions"
+	"ganigeorgiev.com/pocketbase/pocketbase/ui"
 )
 
 func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 	t.Parallel()
 
-	clientStubs := make([]map[string]subscriptions.Client, 0, 11)
+	clientStubs := make([]map[string]subscriptions.Client, 0, 16)
 
-	for range 12 {
+	for range 16 {
 		c1 := subscriptions.NewDefaultClient()
 
 		c2 := subscriptions.NewDefaultClient()
@@ -42,20 +46,6 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 			"c4": c4,
 			"c5": c5,
 		})
-	}
-
-	checkFailureRedirect := func(t testing.TB, app *tests.TestApp, res *http.Response) {
-		loc := res.Header.Get("Location")
-		if !strings.Contains(loc, "/oauth2-redirect-failure") {
-			t.Fatalf("Expected failure redirect, got %q", loc)
-		}
-	}
-
-	checkSuccessRedirect := func(t testing.TB, app *tests.TestApp, res *http.Response) {
-		loc := res.Header.Get("Location")
-		if !strings.Contains(loc, "/oauth2-redirect-success") {
-			t.Fatalf("Expected success redirect, got %q", loc)
-		}
 	}
 
 	// note: don't exit because it is usually called as part of a separate goroutine
@@ -136,18 +126,30 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 		}
 	}
 
+	uiFS := ui.DistDirFS
+
 	scenarios := []tests.ApiScenario{
 		{
-			Name:           "no state query param",
-			Method:         http.MethodGet,
-			URL:            "/api/oauth2-redirect?code=123",
-			BeforeTestFunc: beforeTestFunc(clientStubs[0], nil),
-			ExpectedStatus: http.StatusTemporaryRedirect,
+			Name:   "no state query param",
+			Method: http.MethodGet,
+			URL:    "/api/oauth2-redirect?code=123",
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				beforeTestFunc(clientStubs[0], nil)(t, app, e)
+
+				ui.DistDirFS = nil // mock at least once no_ui build tag
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				"Authentication failed",
+				"<script>window.close()</script>",
+			},
+			NotExpectedContent: []string{
+				`<link`,
+			},
 			ExpectedEvents: map[string]int{"*": 0},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				ui.DistDirFS = uiFS // restore
 				app.Store().Get("cancelFunc").(context.CancelFunc)()
-
-				checkFailureRedirect(t, app, res)
 			},
 		},
 		{
@@ -155,12 +157,15 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 			Method:         http.MethodGet,
 			URL:            "/api/oauth2-redirect?code=123&state=missing",
 			BeforeTestFunc: beforeTestFunc(clientStubs[1], nil),
-			ExpectedStatus: http.StatusTemporaryRedirect,
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				"Authentication failed",
+				"<script>window.close()</script>",
+				`<link rel="stylesheet" type="text/css" href="/_/assets/index-`,
+			},
 			ExpectedEvents: map[string]int{"*": 0},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
 				app.Store().Get("cancelFunc").(context.CancelFunc)()
-
-				checkFailureRedirect(t, app, res)
 			},
 		},
 		{
@@ -170,12 +175,14 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 			BeforeTestFunc: beforeTestFunc(clientStubs[2], map[string][]string{
 				"c3": {`"state":"` + clientStubs[2]["c3"].Id(), `"code":""`},
 			}),
-			ExpectedStatus: http.StatusTemporaryRedirect,
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				"Authentication failed",
+				"<script>window.close()</script>",
+			},
 			ExpectedEvents: map[string]int{"*": 0},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
 				app.Store().Get("cancelFunc").(context.CancelFunc)()
-
-				checkFailureRedirect(t, app, res)
 
 				if clientStubs[2]["c3"].HasSubscription("@oauth2") {
 					t.Fatalf("Expected oauth2 subscription to be removed")
@@ -189,12 +196,14 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 			BeforeTestFunc: beforeTestFunc(clientStubs[3], map[string][]string{
 				"c3": {`"state":"` + clientStubs[3]["c3"].Id(), `"code":"123"`, `"error":"example"`},
 			}),
-			ExpectedStatus: http.StatusTemporaryRedirect,
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				"Authentication failed",
+				"<script>window.close()</script>",
+			},
 			ExpectedEvents: map[string]int{"*": 0},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
 				app.Store().Get("cancelFunc").(context.CancelFunc)()
-
-				checkFailureRedirect(t, app, res)
 
 				if clientStubs[3]["c3"].HasSubscription("@oauth2") {
 					t.Fatalf("Expected oauth2 subscription to be removed")
@@ -206,24 +215,28 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 			Method:         http.MethodGet,
 			URL:            "/api/oauth2-redirect?code=123&state=" + clientStubs[4]["c5"].Id(),
 			BeforeTestFunc: beforeTestFunc(clientStubs[4], nil),
-			ExpectedStatus: http.StatusTemporaryRedirect,
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				"Authentication failed",
+				"<script>window.close()</script>",
+			},
 			ExpectedEvents: map[string]int{"*": 0},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
 				app.Store().Get("cancelFunc").(context.CancelFunc)()
-
-				checkFailureRedirect(t, app, res)
 			},
 		},
 		{
 			Name:           "client without @oauth2 subscription",
 			Method:         http.MethodGet,
-			URL:            "/api/oauth2-redirect?code=123&state=" + clientStubs[4]["c4"].Id(),
+			URL:            "/api/oauth2-redirect?code=123&state=" + clientStubs[5]["c4"].Id(),
 			BeforeTestFunc: beforeTestFunc(clientStubs[5], nil),
-			ExpectedStatus: http.StatusTemporaryRedirect,
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				"Authentication failed",
+				"<script>window.close()</script>",
+			},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
 				app.Store().Get("cancelFunc").(context.CancelFunc)()
-
-				checkFailureRedirect(t, app, res)
 			},
 		},
 		{
@@ -233,12 +246,14 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 			BeforeTestFunc: beforeTestFunc(clientStubs[6], map[string][]string{
 				"c3": {`"state":"` + clientStubs[6]["c3"].Id(), `"code":"123"`},
 			}),
-			ExpectedStatus: http.StatusTemporaryRedirect,
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				"Authentication completed",
+				"<script>window.close()</script>",
+			},
 			ExpectedEvents: map[string]int{"*": 0},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
 				app.Store().Get("cancelFunc").(context.CancelFunc)()
-
-				checkSuccessRedirect(t, app, res)
 
 				if clientStubs[6]["c3"].HasSubscription("@oauth2") {
 					t.Fatalf("Expected oauth2 subscription to be removed")
@@ -256,12 +271,14 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 			BeforeTestFunc: beforeTestFunc(clientStubs[7], map[string][]string{
 				"c3": {`"state":"` + clientStubs[7]["c3"].Id(), `"code":"123"`},
 			}),
-			ExpectedStatus: http.StatusSeeOther,
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				"Authentication completed",
+				"<script>window.close()</script>",
+			},
 			ExpectedEvents: map[string]int{"*": 0},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
 				app.Store().Get("cancelFunc").(context.CancelFunc)()
-
-				checkSuccessRedirect(t, app, res)
 
 				if clientStubs[7]["c3"].HasSubscription("@oauth2") {
 					t.Fatalf("Expected oauth2 subscription to be removed")
@@ -285,12 +302,14 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 			BeforeTestFunc: beforeTestFunc(clientStubs[8], map[string][]string{
 				"c3": {`"state":"` + clientStubs[8]["c3"].Id(), `"code":"` + strings.Repeat("a", 986) + `"`},
 			}),
-			ExpectedStatus: http.StatusSeeOther,
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				"Authentication completed",
+				"<script>window.close()</script>",
+			},
 			ExpectedEvents: map[string]int{"*": 0},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
 				app.Store().Get("cancelFunc").(context.CancelFunc)()
-
-				checkSuccessRedirect(t, app, res)
 
 				if clientStubs[8]["c3"].HasSubscription("@oauth2") {
 					t.Fatalf("Expected oauth2 subscription to be removed")
@@ -318,12 +337,14 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 			BeforeTestFunc: beforeTestFunc(clientStubs[9], map[string][]string{
 				"c3": {`"state":"` + clientStubs[9]["c3"].Id(), `"code":"` + strings.Repeat("a", 985) + `"`},
 			}),
-			ExpectedStatus: http.StatusSeeOther,
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				"Authentication completed",
+				"<script>window.close()</script>",
+			},
 			ExpectedEvents: map[string]int{"*": 0},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
 				app.Store().Get("cancelFunc").(context.CancelFunc)()
-
-				checkSuccessRedirect(t, app, res)
 
 				if clientStubs[9]["c3"].HasSubscription("@oauth2") {
 					t.Fatalf("Expected oauth2 subscription to be removed")
@@ -336,8 +357,13 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 				}
 			},
 		},
+
+		// -----------------------------------------------------------
+		// Redirect confirmation
+		// -----------------------------------------------------------
+
 		{
-			Name:    "client with different IP",
+			Name:    "redirect confirmation - client with different IP",
 			Method:  http.MethodGet,
 			URL:     "/api/oauth2-redirect?code=123&state=" + clientStubs[10]["c3"].Id(),
 			Headers: map[string]string{"x-test-ip": "127.0.0.2"},
@@ -350,37 +376,156 @@ func TestRecordAuthWithOAuth2Redirect(t *testing.T) {
 					"c3": {`"state":"` + clientStubs[10]["c3"].Id(), `"code":"123"`},
 				})(t, app, e)
 			},
-			ExpectedStatus: http.StatusTemporaryRedirect,
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				"Confirm authentication",
+				`<form action="/api/oauth2-redirect/confirm" method="POST"`,
+				`<input type="hidden" name="state" value="` + clientStubs[10]["c3"].Id() + `">`,
+				`<button type="submit" class="btn lg block transparent danger">Cancel authentication</button>`,
+				`<button type="submit" name="key" value="`,
+				`>Confirm authentication</button>`,
+			},
+			NotExpectedContent: []string{
+				"<script>window.close()</script>",
+			},
 			ExpectedEvents: map[string]int{"*": 0},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
-				app.Store().Get("cancelFunc").(context.CancelFunc)()
+				// app.Store().Get("cancelFunc").(context.CancelFunc)()
 
-				checkFailureRedirect(t, app, res)
+				if !clientStubs[10]["c3"].HasSubscription("@oauth2") {
+					t.Fatalf("Expected oauth2 subscription to not be removed")
+				}
+
+				body, err := io.ReadAll(res.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				res.Body.Close()
+
+				// extract the random key from the html
+				matches := regexp.MustCompile(`name="key" value="(.*?)"`).FindStringSubmatch(string(body))
+				if len(matches) != 2 {
+					t.Fatal("Expected body to match key input regex")
+				}
+				key := matches[1]
+
+				dataRaw, _ := json.Marshal(clientStubs[10]["c3"].Get(key))
+				dataStr := string(dataRaw)
+
+				expectedParts := []string{
+					`"state":"` + clientStubs[10]["c3"].Id() + `"`,
+					`"code":"123"`,
+				}
+				for _, part := range expectedParts {
+					if !strings.Contains(dataStr, part) {
+						t.Fatalf("Expected to find %q in\n%s", part, dataStr)
+					}
+				}
 			},
 		},
 		{
-			Name:    "client with different IP and fallback",
-			Method:  http.MethodGet,
-			URL:     "/api/oauth2-redirect?code=123&state=" + clientStubs[11]["c3"].Id(),
-			Headers: map[string]string{"x-test-ip": "127.0.0.2"},
+			Name:   "redirect confirmation - confirm",
+			Method: http.MethodPost,
+			URL:    "/api/oauth2-redirect/confirm",
+			Body:   strings.NewReader(`{"state":"` + clientStubs[11]["c3"].Id() + `","key":"abc"}`),
 			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
-				app.Settings().TrustedProxy.Headers = []string{"x-test-ip"}
-
-				clientStubs[11]["c3"].Set(apis.RealtimeClientIPKey, "127.0.0.1")
-				clientStubs[11]["c3"].Set(apis.RealtimeOAuth2SubscriptionClientIPKey, "127.0.0.2")
+				clientStubs[11]["c3"].Set("abc", apis.OAuth2RedirectData{Code: "test"})
 
 				beforeTestFunc(clientStubs[11], map[string][]string{
-					"c3": {`"state":"` + clientStubs[11]["c3"].Id(), `"code":"123"`},
+					"c3": {`"code":"test"`},
 				})(t, app, e)
 			},
-			ExpectedStatus: http.StatusTemporaryRedirect,
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				"Authentication completed",
+				"<script>window.close()</script>",
+			},
 			ExpectedEvents: map[string]int{"*": 0},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
 				app.Store().Get("cancelFunc").(context.CancelFunc)()
 
-				checkSuccessRedirect(t, app, res)
-
 				if clientStubs[11]["c3"].HasSubscription("@oauth2") {
+					t.Fatalf("Expected oauth2 subscription to be removed")
+				}
+			},
+		},
+		{
+			Name:   "redirect confirmation - cancel",
+			Method: http.MethodPost,
+			URL:    "/api/oauth2-redirect/confirm",
+			Body:   strings.NewReader(`{"state":"` + clientStubs[12]["c3"].Id() + `"}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				clientStubs[12]["c3"].Set("abc", apis.OAuth2RedirectData{Code: "test"})
+
+				beforeTestFunc(clientStubs[12], map[string][]string{
+					"c3": {`"state":"` + clientStubs[12]["c3"].Id() + `"`, `"error":"Cancelled authentication.`},
+				})(t, app, e)
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				"Authentication failed",
+				"<script>window.close()</script>",
+			},
+			ExpectedEvents: map[string]int{"*": 0},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				app.Store().Get("cancelFunc").(context.CancelFunc)()
+
+				if clientStubs[12]["c3"].HasSubscription("@oauth2") {
+					t.Fatalf("Expected oauth2 subscription to be removed")
+				}
+			},
+		},
+		{
+			Name:           "redirect confirmation - client with discarded @oauth2 subscription",
+			Method:         http.MethodPost,
+			URL:            "/api/oauth2-redirect/confirm",
+			Body:           strings.NewReader(`{"state":"` + clientStubs[13]["c5"].Id() + `"}`),
+			BeforeTestFunc: beforeTestFunc(clientStubs[13], nil),
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				"Authentication failed",
+				"<script>window.close()</script>",
+			},
+			ExpectedEvents: map[string]int{"*": 0},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				app.Store().Get("cancelFunc").(context.CancelFunc)()
+			},
+		},
+		{
+			Name:           "redirect confirmation - missing client",
+			Method:         http.MethodPost,
+			URL:            "/api/oauth2-redirect/confirm",
+			Body:           strings.NewReader(`{"state":"missing"}`),
+			BeforeTestFunc: beforeTestFunc(clientStubs[14], nil),
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				"Authentication failed",
+				"<script>window.close()</script>",
+			},
+			ExpectedEvents: map[string]int{"*": 0},
+		},
+		{
+			Name:   "redirect confirmation - confirm (different key)",
+			Method: http.MethodPost,
+			URL:    "/api/oauth2-redirect/confirm",
+			Body:   strings.NewReader(`{"state":"` + clientStubs[15]["c3"].Id() + `","key":"invalid"}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				clientStubs[15]["c3"].Set("abc", apis.OAuth2RedirectData{Code: "test"})
+
+				beforeTestFunc(clientStubs[15], map[string][]string{
+					"c3": {`"state":"` + clientStubs[15]["c3"].Id() + `"`, `"error":"Missing or invalid OAuth2 client data."`},
+				})(t, app, e)
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				"Authentication failed",
+				"<script>window.close()</script>",
+			},
+			ExpectedEvents: map[string]int{"*": 0},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, res *http.Response) {
+				app.Store().Get("cancelFunc").(context.CancelFunc)()
+
+				if clientStubs[15]["c3"].HasSubscription("@oauth2") {
 					t.Fatalf("Expected oauth2 subscription to be removed")
 				}
 			},

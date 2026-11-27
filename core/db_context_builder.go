@@ -11,7 +11,7 @@ var _ dbx.Builder = (*contextDBBuilder)(nil)
 // contextDBBuilder is a [dbx.Builder] wrapper that associates
 // its given context by default to all builder query operations.
 //
-// Note that this is intented to be used as a lighter version of dbx.DB.WithContext()
+// Note that this is intended to be used as a lighter version of dbx.DB.WithContext()
 // as the only thing it copies is the pointer to the existing Builder value and
 // the context is attached lazily with each new user created query.
 type contextDBBuilder struct {

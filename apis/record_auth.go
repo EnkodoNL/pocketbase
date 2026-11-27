@@ -9,13 +9,14 @@ import (
 // the corresponding handlers.
 func bindRecordAuthApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
 	// global oauth2 subscription redirect handler
-	rg.GET("/oauth2-redirect", oauth2SubscriptionRedirect).Bind(
+	rg.GET("/oauth2-redirect", oauth2RedirectHandler).Bind(
 		SkipSuccessActivityLog(), // skip success log as it could contain sensitive information in the url
 	)
 	// add again as POST in case of response_mode=form_post
-	rg.POST("/oauth2-redirect", oauth2SubscriptionRedirect).Bind(
+	rg.POST("/oauth2-redirect", oauth2RedirectHandler).Bind(
 		SkipSuccessActivityLog(), // skip success log as it could contain sensitive information in the url
 	)
+	rg.POST("/oauth2-redirect/confirm", oauth2RedirectConfirmHandler)
 
 	sub := rg.Group("/collections/{collection}")
 

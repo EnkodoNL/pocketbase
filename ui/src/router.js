@@ -41,7 +41,7 @@ window.app.routes.fallbackPath = "#/collections";
  * @param {string} path
  * @param {RouteHandler} handler
  */
-app.routes.guestOnly = function(path, handler) {
+app.routes.guestOnly = function (path, handler) {
     if (app.store._ready) {
         throw new Error("the router is already initialized");
     }
@@ -72,7 +72,7 @@ app.routes.guestOnly = function(path, handler) {
  * @param {string} path
  * @param {RouteHandler} handler
  */
-app.routes.superuserOnly = function(path, handler) {
+app.routes.superuserOnly = function (path, handler) {
     if (app.store._ready) {
         throw new Error("the router is already initialized");
     }
@@ -103,7 +103,7 @@ app.routes.superuserOnly = function(path, handler) {
  * @param {string} path
  * @param {RouteHandler} handler
  */
-app.routes.blank = function(path, handler) {
+app.routes.blank = function (path, handler) {
     if (app.store._ready) {
         throw new Error("the router is already initialized");
     }
@@ -150,16 +150,6 @@ app.routes.blank("#/auth/confirm-verification/{token}", async (route) => {
 app.routes.blank("#/auth/confirm-email-change/{token}", async (route) => {
     const { pageConfirmEmailChange } = await import("@/auth/pageConfirmEmailChange");
     return pageConfirmEmailChange(route);
-});
-
-// oauth2 redirect pages
-app.routes.blank("#/auth/oauth2-redirect-success", async (route) => {
-    const { pageOAuth2RedirectSuccess } = await import("@/auth/pageOAuth2RedirectSuccess");
-    return pageOAuth2RedirectSuccess(route);
-});
-app.routes.blank("#/auth/oauth2-redirect-failure", async (route) => {
-    const { pageOAuth2RedirectFailure } = await import("@/auth/pageOAuth2RedirectFailure");
-    return pageOAuth2RedirectFailure(route);
 });
 
 app.routes.superuserOnly("#/collections", pageCollections);

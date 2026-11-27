@@ -90,6 +90,7 @@ func TestBaseAppWithContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	//nolint:staticcheck
 	newCtx := context.WithValue(context.Background(), "test", true)
 
 	newApp := app.WithContext(newCtx)

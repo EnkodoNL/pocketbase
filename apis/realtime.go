@@ -32,13 +32,6 @@ const RealtimeClientAuthKey = "auth"
 // that holds the IP of the client that initiliazed the realtime connection.
 const RealtimeClientIPKey = "pbRealtimeClientIP"
 
-// RealtimeClientIPKey is the name of the realtime client store key
-// that holds the IP of the client that submitted the OAuth2 subscription.
-//
-// Note that this is used mostly as a fallback in the OAuth2 redirect handler checks
-// to minimize false-positives in relation to https://ganigeorgiev.com/pocketbase/discussions/7758#comment-7ccdsr6gi1nd0y3.
-const RealtimeOAuth2SubscriptionClientIPKey = "pbRealtimeOAuth2SubscriptionClientIP"
-
 // bindRealtimeApi registers the realtime api endpoints.
 func bindRealtimeApi(app core.App, rg *router.RouterGroup[*core.RequestEvent]) {
 	sub := rg.Group("/realtime")
@@ -222,14 +215,6 @@ func realtimeSetSubscriptions(e *core.RequestEvent) error {
 	return e.App.OnRealtimeSubscribeRequest().Trigger(event, func(e *core.RealtimeSubscribeRequestEvent) error {
 		// update auth state
 		e.Client.Set(RealtimeClientAuthKey, e.Auth)
-
-		// store the IP of the first "@oauth2" subscription request
-		// to allow IP fallback checks in the redirect handler
-		if len(e.Subscriptions) == 1 &&
-			e.Subscriptions[0] == oauth2SubscriptionTopic &&
-			len(e.Client.Subscriptions()) == 0 {
-			e.Client.Set(RealtimeOAuth2SubscriptionClientIPKey, e.RealIP())
-		}
 
 		// unsubscribe from any previous existing subscriptions
 		e.Client.Unsubscribe()

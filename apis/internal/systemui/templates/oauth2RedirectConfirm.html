@@ -1,0 +1,18 @@
+{{ define "body" }}
+<div class="wrapper p-base txt-center">
+    <h3>{{ .PageTitle }}</h3>
+
+    <main class="m-t-base txt-lg">
+        <p>We need an extra confirmation to ensure that it was you who initiated the request.</p>
+        <p>The client IP (<strong>{{ .ConnectionIP }}</strong>) that started the authentication is different from the one that was just authorized (<strong>{{ .RedirectIP }}</strong>).</p>
+        <p><strong>If you don't recognize the above IP addresses, please cancel the authentication.</strong></p>
+    </main>
+
+    <form action="/api/oauth2-redirect/confirm" method="POST" class="wrapper sm m-t-base">
+        <input type="hidden" name="state" value="{{ .State }}">
+        <div><button type="submit" name="key" value="{{ .Key }}" class="btn lg block">Confirm authentication</button></div>
+        <br>
+        <div><button type="submit" class="btn lg block transparent danger">Cancel authentication</button></div>
+    </nav>
+</div>
+{{ end }}

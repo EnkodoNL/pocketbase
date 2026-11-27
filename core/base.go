@@ -51,6 +51,8 @@ const (
 )
 
 // base dummy context to ensure that it will be different from the other non-app contexts.
+//
+//nolint:staticcheck
 var baseAppCtx = context.WithValue(context.Background(), "pbBaseApp", true)
 
 // FilesManager defines an interface with common methods that files manager models should implement.
